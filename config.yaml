@@ -1,0 +1,32 @@
+# ===== Penny Stock Paper Bot settings =====
+# Edit these on GitHub from your tablet (pencil icon), then "Commit changes".
+
+paused: false            # true = no new trades (stop-losses on Alpaca still work)
+
+starting_capital: 100    # the bot's own fake budget in dollars
+
+# --- which stocks it looks at ---
+min_price: 1.00
+max_price: 5.00
+min_avg_volume: 1000000  # average shares traded per day (last 20 days)
+max_one_day_move: 0.40   # skip if it moved more than 40% in a day in the last 5 days
+max_spread: 0.01         # skip if bid/ask gap is wider than 1% of price
+watchlist_size: 20
+exchanges: [NYSE, NASDAQ, AMEX]
+
+# --- buy / sell rules ---
+sma_days: 20             # buy when price closes above its 20-day average...
+volume_multiple: 1.5     # ...and volume is at least 1.5x normal
+take_profit: 0.08        # sell at +8%
+stop_loss: 0.04          # sell at -4%
+max_hold_days: 5         # or sell after 5 trading days
+
+# --- risk limits ---
+max_positions: 3
+max_per_stock: 35        # dollars
+risk_per_trade: 2        # max dollars lost if the stop-loss hits
+daily_loss_limit: 5      # dollars; no new trades for the rest of the day
+max_drawdown: 15         # dollars below the peak; bot stops completely
+
+# --- backtest ---
+trade_cost: 0.005        # 0.5% each way for spread + slippage
