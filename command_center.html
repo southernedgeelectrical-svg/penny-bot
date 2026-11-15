@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Penny Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05070f; --bg2:#0a0f1f; --panel:rgba(14,20,40,.72); --line:rgba(120,160,255,.16);
+  --text:#dfe7ff; --dim:#7d8bb3; --faint:#5d6a96;
+  --accent:#2fb8ff; --accent2:#7a5cff; --glow:rgba(47,184,255,.45);
+  --pos:#3dffa8; --neg:#ff3d6e; --warn:#ffc23d;
+  --disp:"Big Shoulders Display",Impact,"Arial Narrow",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+body.mode-backtest{--accent:#ff3df0; --accent2:#9b4dff; --glow:rgba(255,61,240,.45)}
+body.st-paused{--accent:#ffc23d; --glow:rgba(255,194,61,.45)}
+body.st-halted{--accent:#ff3d6e; --glow:rgba(255,61,110,.5)}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;overflow-x:hidden}
+html{background:#05070f}
+body{background:radial-gradient(ellipse at 50% 40%,var(--bg2) 0%,var(--bg) 70%);color:var(--text);
+  font-family:var(--mono);font-size:12px;overflow-x:hidden;transition:--accent .6s}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+/* ---------- grid floor ---------- */
+.floor{position:fixed;left:-50%;right:-50%;bottom:0;height:34vh;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--accent) 1px,transparent 1px),linear-gradient(90deg,var(--accent) 1px,transparent 1px);
+  background-size:60px 60px;opacity:.35;transform:perspective(420px) rotateX(62deg);transform-origin:50% 100%;
+  -webkit-mask-image:linear-gradient(to top,#000 10%,transparent 95%);mask-image:linear-gradient(to top,#000 10%,transparent 95%);
+  animation:floor 4s linear infinite}
+@keyframes floor{to{background-position:0 60px,0 0}}
+.horizon{position:fixed;left:0;right:0;bottom:33vh;height:2px;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);box-shadow:0 0 30px 6px var(--glow);opacity:.35}
+.scan{position:fixed;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px)}
+
+/* ---------- layout ---------- */
+.app{position:relative;z-index:1;display:grid;grid-template-columns:330px minmax(0,1fr) 340px;grid-template-rows:auto 1fr auto;
+  min-height:100vh;gap:0 24px;padding:22px 28px 0}
+header.brand{grid-column:1}
+.brand h1{font-family:var(--disp);font-weight:800;font-size:46px;letter-spacing:2px;margin:0;line-height:.9}
+.brand h1 small{font-size:18px;color:var(--accent);font-weight:500;margin-left:4px}
+.brand p{margin:6px 0 0;color:var(--dim);letter-spacing:2px;font-size:10px;text-transform:uppercase}
+.topcenter{grid-column:2;display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:4px}
+.toggle{display:flex;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);
+  box-shadow:0 0 24px rgba(0,0,0,.4)}
+.toggle button{padding:8px 18px;border-radius:7px;color:var(--dim);font-weight:600;display:flex;gap:8px;align-items:center;transition:.25s}
+.toggle button.on{background:#e9eefc;color:#0a0f1f;box-shadow:0 0 18px var(--glow)}
+.toggle .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.statusline{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 18px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
+.statusline b{color:var(--accent);font-weight:600}
+.statusline .pulse{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;
+  box-shadow:0 0 8px var(--accent);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.clock{grid-column:3;text-align:right}
+.clock .t{font-family:var(--disp);font-size:56px;font-weight:700;line-height:.85;letter-spacing:1px}
+.clock .d{color:var(--dim);letter-spacing:3px;font-size:10px;text-transform:uppercase;margin-top:6px}
+.clock .mk{margin-top:8px;font-size:10px;letter-spacing:2px}
+
+.col{grid-row:2;padding-top:26px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.left{grid-column:1}.right{grid-column:3}
+.sect{display:flex;align-items:center;gap:10px;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--accent);font-weight:700}
+.sect span{color:var(--faint);font-weight:400}
+.sect:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+
+/* vitals */
+.vital{position:relative}
+.vital .lbl{display:flex;justify-content:space-between;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim)}
+.vital .lbl i{font-style:normal;color:var(--text)}
+.vital .lbl i:before{content:"● ";color:var(--accent)}
+.vital .chip{color:var(--warn)}
+.vital .chip.pos{color:var(--pos)}.vital .chip.neg{color:var(--neg)}
+.vital .big{font-family:var(--disp);font-size:44px;font-weight:700;line-height:1;margin:2px 0 0}
+.vital svg{width:100%;height:34px;display:block;overflow:visible}
+
+/* gauge card */
+.gauge{border:1px solid var(--neg);background:linear-gradient(135deg,rgba(255,61,110,.10),rgba(255,61,110,.02));
+  padding:12px 14px;transform:perspective(600px) rotateY(8deg);box-shadow:0 0 30px rgba(255,61,110,.15);
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+.gauge.ok{border-color:var(--accent);background:linear-gradient(135deg,rgba(47,184,255,.10),transparent);box-shadow:0 0 30px var(--glow)}
+.gauge h3{margin:0;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--neg)}
+.gauge.ok h3{color:var(--accent)}
+.gauge .n{font-family:var(--disp);font-size:40px;font-weight:800;line-height:1}
+.gauge .n small{font-size:14px;color:var(--neg);margin-left:4px}
+.gauge.ok .n small{color:var(--accent)}
+.ticks{display:flex;gap:3px;margin-top:8px;height:16px}
+.ticks i{flex:1;background:rgba(255,255,255,.08)}
+.ticks i.on{background:var(--neg);box-shadow:0 0 6px var(--neg)}
+.gauge.ok .ticks i.on{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.scale{display:flex;justify-content:space-between;color:var(--faint);font-size:9px;margin-top:4px}
+
+.mini{width:100%;border-collapse:collapse;font-size:11px}
+.mini td{padding:6px 4px;border-bottom:1px dashed var(--line)}
+.mini td:first-child{font-weight:700;color:var(--text)}
+.mini .r{text-align:right}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+.empty{color:var(--faint);font-size:11px;letter-spacing:1px}
+
+/* center */
+.center{grid-column:2;grid-row:2;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-height:520px}
+#orb{position:absolute;inset:0;width:100%;height:100%}
+.name{position:relative;text-align:center;margin-bottom:6vh}
+.name h2{font-family:var(--disp);font-size:72px;font-weight:800;letter-spacing:10px;margin:0;line-height:1;
+  text-shadow:0 0 30px var(--glow)}
+.name p{margin:6px 0 14px;color:var(--dim);letter-spacing:2px;font-size:11px}
+.states{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:720px}
+.states span{padding:6px 12px;border:1px solid var(--line);background:rgba(10,15,31,.7);color:var(--faint);
+  letter-spacing:1px;font-size:11px;transition:.3s}
+.states span.on{color:#fff;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 25%,transparent);
+  box-shadow:0 0 16px var(--glow)}
+.reason{margin-top:12px;color:var(--warn);font-size:11px;letter-spacing:1px;max-width:520px}
+
+/* skills */
+.skills{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.skill{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px;border:1px solid var(--line);
+  background:var(--panel);font-weight:700;font-size:12px;transition:.2s;text-align:left;min-height:52px}
+.skill:after{content:"→";color:var(--accent);font-size:16px;transition:.2s}
+.skill:hover{border-color:var(--accent);box-shadow:0 0 16px var(--glow);transform:translateY(-1px)}
+.skill:hover:after{transform:translateX(3px)}
+.hint{color:var(--faint);font-size:9px;letter-spacing:2px;text-transform:uppercase}
+
+/* voice */
+.talk{align-self:flex-start;padding:8px 14px;border:1px solid var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);font-weight:700}
+.talk.live{background:var(--accent);color:#05070f;box-shadow:0 0 20px var(--glow);animation:pulse 1s infinite}
+.vline{height:2px;background:linear-gradient(90deg,var(--accent),transparent);opacity:.5}
+.transcript{font-size:11px;line-height:1.55;color:var(--dim);max-height:120px;overflow:auto}
+.transcript .you{color:var(--text)}.transcript .bot{color:var(--accent)}
+.ask{display:flex;gap:6px}
+.ask input{flex:1;min-width:0;background:rgba(10,15,31,.8);border:1px solid var(--line);color:var(--text);padding:9px 10px;font:inherit}
+.ask input:focus{outline:none;border-color:var(--accent)}
+.ask button{padding:0 12px;border:1px solid var(--line);background:var(--panel)}
+
+/* bottom bar */
+.bar{grid-column:1/-1;grid-row:3;display:flex;align-items:center;gap:10px;padding:12px 0 14px;margin-top:16px;
+  border-top:1px solid var(--line);font-size:11px}
+.bar .tk{flex:1;min-width:0;overflow:hidden;white-space:nowrap;color:var(--dim);-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.bar .tk div{display:inline-block;padding-left:100%;animation:tick 60s linear infinite}
+@keyframes tick{to{transform:translateX(-100%)}}
+.pill{padding:7px 12px;border:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.pill.acc{border-color:var(--accent);color:var(--accent)}
+.pill:hover{border-color:var(--accent)}
+
+/* drawer */
+.drawer{position:fixed;inset:0;z-index:60;display:none;background:rgba(2,4,10,.7);backdrop-filter:blur(4px)}
+.drawer.open{display:flex;align-items:flex-end;justify-content:center}
+.drawer .sheet{width:min(1000px,100%);max-height:78vh;overflow:auto;background:#0a0f1f;border:1px solid var(--accent);
+  border-bottom:0;padding:18px 20px 28px;box-shadow:0 -10px 60px var(--glow)}
+.drawer h3{font-family:var(--disp);font-size:28px;margin:0 0 12px;letter-spacing:2px;display:flex;justify-content:space-between}
+.drawer h3 button{font-size:14px;color:var(--dim)}
+.drawer table{width:100%;border-collapse:collapse;font-size:12px}
+.drawer th,.drawer td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+.drawer th{color:var(--dim);font-weight:400;letter-spacing:1px;text-transform:uppercase;font-size:10px}
+.drawer pre{white-space:pre-wrap;font:inherit;font-size:11px;color:var(--dim);margin:0}
+.drawer .chart svg{width:100%;height:auto}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
+.kv div{border:1px solid var(--line);padding:10px}.kv span{display:block;color:var(--dim);font-size:10px;letter-spacing:1px;text-transform:uppercase}
+.kv b{font-family:var(--disp);font-size:26px}
+
+/* ---------- responsive ---------- */
+@media (max-width:1100px){
+  .app{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto auto auto auto;padding:16px 16px 0;gap:0 16px}
+  header.brand{grid-column:1;grid-row:1}.clock{grid-column:2;grid-row:1}
+  .topcenter{grid-column:1/-1;grid-row:2;padding-top:16px}
+  .center{grid-column:1/-1;grid-row:3;min-height:440px}
+  .left{grid-column:1;grid-row:4}.right{grid-column:2;grid-row:4}
+  .bar{grid-row:5}
+}
+@media (max-width:680px){
+  .app{grid-template-columns:minmax(0,1fr) auto}
+  header.brand{grid-column:1;grid-row:1}.clock{grid-column:2;grid-row:1}.clock .t{font-size:38px}
+  .brand h1{font-size:38px}
+  .topcenter,.center,.left,.right,.bar{grid-column:1/-1;grid-row:auto}
+  .center{min-height:400px}.name h2{font-size:52px;letter-spacing:6px}
+  .gauge{transform:none}
+  .center{order:1}.left{order:2}.right{order:3}.bar{order:4}
+  .bar{flex-wrap:wrap}.bar .tk{flex-basis:100%;order:-1}
+}
+@media (prefers-reduced-motion:reduce){.floor,.bar .tk div,.statusline .pulse{animation:none}}
+</style>
+</head>
+<body>
+<div class="floor"></div><div class="horizon"></div><div class="scan"></div>
+
+<div class="app">
+  <header class="brand">
+    <h1>PENNY<small>/v2</small></h1>
+    <p>Your command center, reimagined</p>
+  </header>
+
+  <div class="topcenter">
+    <div class="toggle" role="tablist">
+      <button id="mPaper" class="on" onclick="setMode('paper')"><span class="dot"></span>Paper Trading</button>
+      <button id="mBack" onclick="setMode('backtest')">&lt;/&gt; Backtest</button>
+    </div>
+    <div class="statusline" id="statusline"></div>
+  </div>
+
+  <div class="clock">
+    <div class="t" id="clk">--:--</div>
+    <div class="d" id="date"></div>
+    <div class="mk" id="mkt"></div>
+  </div>
+
+  <!-- LEFT: vitals -->
+  <section class="col left" id="left"></section>
+
+  <!-- CENTER: orb -->
+  <section class="center">
+    <canvas id="orb"></canvas>
+    <div class="name">
+      <h2 id="orbName">PENNY</h2>
+      <p id="orbSub">Paper-trading core · fake money only</p>
+      <div class="states" id="states"></div>
+      <div class="reason" id="reason"></div>
+    </div>
+  </section>
+
+  <!-- RIGHT: skills + voice -->
+  <section class="col right">
+    <div class="sect">Skills <span>quick access</span></div>
+    <div class="skills" id="skills"></div>
+    <div class="hint">Runs on GitHub Actions — results appear here after each run</div>
+
+    <div class="sect" style="margin-top:8px">Voice <span>tap to talk</span></div>
+    <div class="vline"></div>
+    <button class="talk" id="talk">Tap to talk</button>
+    <div class="hint">Speech in browser — try “status”, “positions”, “profit”, “watchlist”</div>
+    <div class="transcript" id="transcript"></div>
+    <form class="ask" id="ask"><input id="q" placeholder="Ask or command…" autocomplete="off"><button>↵</button></form>
+
+    <div class="sect" style="margin-top:8px">Watchlist <span>today</span></div>
+    <table class="mini" id="watch"></table>
+  </section>
+
+  <footer class="bar">
+    <span class="pill acc" id="lastRun"></span>
+    <div class="tk"><div id="ticker"></div></div>
+    <button class="pill" onclick="openPanel('log')">▤ Terminal</button>
+    <button class="pill" onclick="talk()">Tap to talk</button>
+    <a class="pill" id="runLink" target="_blank" rel="noopener">+ New run</a>
+  </footer>
+</div>
+
+<div class="drawer" id="drawer" onclick="if(event.target===this)closePanel()">
+  <div class="sheet"><h3><span id="dTitle"></span><button onclick="closePanel()">ESC ✕</button></h3><div id="dBody"></div></div>
+</div>
+
+<script id="pennyData" type="application/json">/*__DATA__*/</script>
+<script>
+const D = JSON.parse(document.getElementById('pennyData').textContent);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const usd = (x, sign) => x == null ? '—' : (sign && x > 0 ? '+' : (x < 0 ? '-' : '')) + '$' + Math.abs(x).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const cls = x => x > 0 ? 'pos' : x < 0 ? 'neg' : '';
+const GH = 'https://github.com/' + D.repo;
+let MODE = 'paper';
+
+/* ---------- state ---------- */
+const STATES = ['Idle','Scanning','Holding','Listening','Speaking','Paused','Halted','Auto'];
+let base = D.halted ? 'Halted' : D.paused ? 'Paused' : D.positions.length ? 'Holding' : 'Idle';
+let transient = null;
+document.body.classList.toggle('st-halted', !!D.halted);
+document.body.classList.toggle('st-paused', !D.halted && !!D.paused);
+function renderStates(){
+  const cur = transient || base;
+  $('states').innerHTML = STATES.map(s => `<span class="${s===cur || (s==='Auto' && !D.paused && !D.halted) ? 'on':''}">${s}</span>`).join('');
+}
+$('reason').textContent = D.halted ? 'KILL SWITCH: ' + D.halt_reason : D.paused ? 'Paused in config.yaml — no new buys (stop-losses still active)' : '';
+
+/* ---------- status line + clock ---------- */
+function statusline(){
+  const s = (transient || base).toUpperCase();
+  $('statusline').innerHTML =
+    `<span><i class="pulse"></i><b>CORE</b> · ${s}</span>` +
+    `<span><b>CONNECTED</b> ALPACA · PAPER</span>` +
+    `<span><b>POSITIONS</b> · ${D.positions.length}/${D.cfg.max_positions} OPEN</span>` +
+    `<span><b>MODE</b> · ${MODE === 'paper' ? 'LIVE PAPER' : 'BACKTEST'}</span>`;
+}
+function tick(){
+  const now = new Date();
+  const ct = new Date(now.toLocaleString('en-US',{timeZone:'America/Chicago'}));
+  $('clk').textContent = ct.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});
+  $('date').textContent = ct.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) + ' · CT';
+  const m = ct.getHours()*60 + ct.getMinutes(), wd = ct.getDay();
+  const open = wd > 0 && wd < 6 && m >= 510 && m < 900;
+  $('mkt').innerHTML = `<span style="color:${open?'var(--pos)':'var(--faint)'}">● MARKET ${open?'OPEN':'CLOSED'}</span>`;
+}
+tick(); setInterval(tick, 1000);
+
+/* ---------- sparklines ---------- */
+function spark(vals, color){
+  vals = (vals || []).filter(v => v != null);
+  if (vals.length < 2) vals = [0, 0];
+  const lo = Math.min(...vals), hi = Math.max(...vals), r = hi - lo || 1, W = 300, H = 34;
+  const pts = vals.map((v,i) => [i*W/(vals.length-1), H-4 - (v-lo)*(H-8)/r]);
+  const p = pts.map(q => q[0].toFixed(1)+','+q[1].toFixed(1)).join(' ');
+  const [lx, ly] = pts[pts.length-1];
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${p}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" style="filter:drop-shadow(0 0 4px ${color})"/><circle cx="${lx}" cy="${ly}" r="3.5" fill="${color}" style="filter:drop-shadow(0 0 6px ${color})"/></svg>`;
+}
+function vital(label, big, chip, chipCls, series, color){
+  return `<div class="vital"><div class="lbl"><i>${label}</i><span class="chip ${chipCls||''}">${chip||''}</span></div>
+    <div class="big">${big}</div>${spark(series, color)}</div>`;
+}
+function gauge(title, used, limit, note, unit, good){
+  const pct = limit ? Math.max(0, Math.min(100, used/limit*100)) : 0;
+  const n = 30, on = Math.round(pct/100*n);
+  return `<div class="gauge ${(good ?? pct < 50) ? 'ok':''}"><h3>${title}</h3>
+    <div class="n">${pct.toFixed(0)}<small>${unit || '% used'}</small></div>
+    <div class="ticks">${Array.from({length:n},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div>
+    <div class="scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+    <div class="hint" style="margin-top:6px">${note}</div></div>`;
+}
+
+/* ---------- left column (switches with mode) ---------- */
+function renderLeft(){
+  const L = $('left');
+  if (MODE === 'paper') {
+    const eq = D.equity_hist.map(e => e[1]);
+    const pl = D.equity - D.cfg.starting_capital;
+    const ddUsed = Math.max(0, D.peak - D.equity);
+    const posRows = D.positions.map(p => `<tr><td>${esc(p.symbol)}</td><td>${p.qty} @ $${p.entry.toFixed(2)}</td>
+      <td class="r ${cls(p.pnl)}">${usd(p.pnl,1)}</td></tr>`).join('');
+    L.innerHTML = `<div class="sect">System vitals <span>account data</span></div>` +
+      vital('Account value', usd(D.equity), usd(pl,1), cls(pl), eq, pl >= 0 ? 'var(--pos)' : 'var(--neg)') +
+      vital('Cash', usd(D.cash), D.positions.length + ' open', '', eq, '#7a5cff') +
+      vital('vs. holding IWM', D.iwm_ret == null ? '—' : usd(pl - D.iwm_ret, 1), D.iwm_ret == null ? '' : 'IWM ' + usd(D.iwm_ret,1), '', D.iwm_hist, 'var(--accent)') +
+      gauge('Risk · drawdown budget', ddUsed, D.cfg.max_drawdown, `${usd(ddUsed)} of ${usd(D.cfg.max_drawdown)} below peak ${usd(D.peak)}`) +
+      `<div class="sect">Positions <span>live</span></div>` +
+      (posRows ? `<table class="mini">${posRows}</table>` : `<div class="empty">NO OPEN POSITIONS</div>`);
+  } else {
+    const B = D.backtest;
+    if (!B) { L.innerHTML = `<div class="sect">Backtest <span>no data</span></div><div class="empty">No backtest yet — tap “Run backtest”.</div>`; return; }
+    const t = B.periods[B.periods.length-1];
+    L.innerHTML = `<div class="sect">Backtest <span>${esc(B.run)}</span></div>` +
+      B.periods.map(p => vital(p.name, usd(p.end), 'IWM ' + usd(p.bench_end), p.end >= p.bench_end ? 'pos':'neg', p.curve, p.end >= p.bench_end ? 'var(--pos)':'var(--neg)')).join('') +
+      gauge('Win rate · unseen test', t.win_rate*100, 100, `${t.trades} trades · avg win ${usd(t.avg_win)} / loss ${usd(t.avg_loss)}`, '% wins', t.win_rate >= .5) +
+      `<div class="hint">Survivorship caution: real results are usually worse than a backtest.</div>`;
+  }
+}
+
+/* ---------- skills / panels ---------- */
+const SKILLS = [
+  ['Run now', () => window.open(GH + '/actions/workflows/bot.yml', '_blank')],
+  ['Run backtest', () => window.open(GH + '/actions/workflows/bot.yml', '_blank')],
+  ['Trade history', () => openPanel('trades')],
+  ['Equity chart', () => openPanel('chart')],
+  ['Bot terminal', () => openPanel('log')],
+  ['Strategy rules', () => openPanel('rules')],
+  ['Edit config', () => window.open(GH + '/edit/main/config.yaml', '_blank')],
+  [D.paused ? 'Resume bot' : 'Pause bot', () => window.open(GH + '/edit/main/config.yaml', '_blank')],
+];
+$('skills').innerHTML = SKILLS.map((s,i) => `<button class="skill" data-i="${i}">${s[0]}</button>`).join('');
+$('skills').onclick = e => { const b = e.target.closest('.skill'); if (b) SKILLS[b.dataset.i][1](); };
+$('runLink').href = GH + '/actions/workflows/bot.yml';
+$('lastRun').textContent = 'Last run · ' + (D.last_run || '—');
+
+$('watch').innerHTML = D.watchlist.length ? D.watchlist.slice(0,8).map(w =>
+  `<tr><td>${esc(w.symbol)}</td><td style="color:var(--dim)">${esc(w.note)}</td><td class="r pos">${w.buy?'BUY':''}</td></tr>`).join('')
+  : `<tr><td class="empty">Built on the first market-day run</td></tr>`;
+
+$('ticker').textContent = D.log.slice(-12).join('   ◆   ') || 'No log yet';
+
+function panelHTML(k){
+  if (k === 'trades') {
+    const r = D.trades.slice().reverse().map(t => `<tr><td>${esc(t.exit_date)}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(t.qty)}</td>
+      <td>$${(+t.entry_price).toFixed(2)}</td><td>$${(+t.exit_price).toFixed(2)}</td><td class="${cls(+t.pnl)}">${usd(+t.pnl,1)}</td><td>${esc(t.reason)}</td></tr>`).join('');
+    const s = D.stats;
+    return `<div class="kv"><div><span>Trades closed</span><b>${s.n}</b></div><div><span>Win rate</span><b>${s.win_rate==null?'—':Math.round(s.win_rate*100)+'%'}</b></div>
+      <div><span>Avg win</span><b class="pos">${usd(s.avg_win)}</b></div><div><span>Avg loss</span><b class="neg">${usd(s.avg_loss)}</b></div>
+      <div><span>Biggest loss</span><b>${usd(s.worst)}</b></div><div><span>Max drawdown</span><b>${usd(s.mdd)}</b></div></div>
+      <table><tr><th>Date</th><th>Stock</th><th>Shares</th><th>Buy</th><th>Sell</th><th>P/L</th><th>Why</th></tr>${r || '<tr><td colspan="7">No closed trades yet</td></tr>'}</table>`;
+  }
+  if (k === 'log') return `<pre>${esc(D.log.join('\n')) || 'No log yet'}</pre>`;
+  if (k === 'chart') return `<div class="chart">${bigChart()}</div>`;
+  if (k === 'rules') { const c = D.cfg; return `<div class="kv">
+      <div><span>Price range</span><b>$${c.min_price}–$${c.max_price}</b></div><div><span>Buy signal</span><b>&gt; ${c.sma_days}d SMA · ${c.volume_multiple}× vol</b></div>
+      <div><span>Take profit</span><b class="pos">+${c.take_profit*100}%</b></div><div><span>Stop loss</span><b class="neg">-${c.stop_loss*100}%</b></div>
+      <div><span>Max hold</span><b>${c.max_hold_days} days</b></div><div><span>Max positions</span><b>${c.max_positions} × $${c.max_per_stock}</b></div>
+      <div><span>Risk / trade</span><b>$${c.risk_per_trade}</b></div><div><span>Daily stop</span><b>-$${c.daily_loss_limit}</b></div>
+      <div><span>Kill switch</span><b>-$${c.max_drawdown} from peak</b></div></div>
+      <p class="hint">Paper only. Edit these in config.yaml.</p>`; }
+}
+const TITLES = {trades:'Trade history', log:'Bot terminal', chart:'Equity vs IWM', rules:'Strategy rules'};
+function openPanel(k){ $('dTitle').textContent = TITLES[k]; $('dBody').innerHTML = panelHTML(k); $('drawer').classList.add('open'); }
+function closePanel(){ $('drawer').classList.remove('open'); }
+addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+function bigChart(){
+  const eq = D.equity_hist.map(e=>e[1]), iw = D.iwm_hist, lab = D.equity_hist.map(e=>e[0]);
+  if (eq.length < 2) return '<p class="empty">Chart appears after a few runs.</p>';
+  const all = eq.concat(iw.filter(v=>v!=null)); let lo = Math.min(...all), hi = Math.max(...all); if (hi-lo<1){lo-=1;hi+=1;}
+  const W=900,H=300,P=44, x=i=>P+i*(W-2*P)/(eq.length-1), y=v=>H-P-(v-lo)*(H-2*P)/(hi-lo);
+  let o = `<svg viewBox="0 0 ${W} ${H}">`;
+  for (let k=0;k<5;k++){const v=lo+(hi-lo)*k/4;o+=`<line x1="${P}" x2="${W-P}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(120,160,255,.15)"/><text x="2" y="${y(v)+4}" fill="#7d8bb3" font-size="11">$${v.toFixed(0)}</text>`;}
+  o += `<text x="${P}" y="${H-12}" fill="#7d8bb3" font-size="11">${esc(lab[0])}</text><text x="${W-P}" y="${H-12}" fill="#7d8bb3" font-size="11" text-anchor="end">${esc(lab[lab.length-1])}</text>`;
+  [[eq,'#3dffa8','Bot'],[iw,'#2fb8ff','IWM']].forEach(([s,c,n],j)=>{
+    const p = s.map((v,i)=>v==null?'':x(i).toFixed(1)+','+y(v).toFixed(1)).filter(Boolean).join(' ');
+    o += `<polyline points="${p}" fill="none" stroke="${c}" stroke-width="2.5" style="filter:drop-shadow(0 0 4px ${c})"/><rect x="${P+j*120}" y="8" width="12" height="12" fill="${c}"/><text x="${P+18+j*120}" y="19" fill="#dfe7ff" font-size="12">${n}</text>`;
+  });
+  return o + '</svg>';
+}
+
+/* ---------- mode toggle ---------- */
+function setMode(m){
+  MODE = m;
+  document.body.classList.toggle('mode-backtest', m === 'backtest');
+  $('mPaper').classList.toggle('on', m === 'paper'); $('mBack').classList.toggle('on', m === 'backtest');
+  $('orbName').textContent = m === 'paper' ? 'PENNY' : 'BACKTEST';
+  $('orbSub').textContent = m === 'paper' ? 'Paper-trading core · fake money only' : '2-year history · build vs unseen test';
+  renderLeft(); statusline(); orbColor();
+  try { localStorage.setItem('pennyMode', m); } catch(e) {}
+}
+
+/* ---------- particle orb ---------- */
+const cv = $('orb'), cx = cv.getContext('2d');
+let W, H, DPR, pts = [], rgb = [47,184,255], target = rgb.slice(), energy = 0.3;
+function orbColor(){
+  const v = getComputedStyle(document.body).getPropertyValue('--accent').trim();
+  const h = v.replace('#',''); target = [0,2,4].map(i => parseInt(h.substr(i,2),16));
+}
+function sizeOrb(){
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = cv.clientWidth; H = cv.clientHeight; cv.width = W*DPR; cv.height = H*DPR; cx.setTransform(DPR,0,0,DPR,0,0);
+}
+const N = innerWidth < 680 ? 700 : 1400;
+for (let i=0;i<N;i++){ // points in a sphere, denser toward the core
+  const u = Math.random()*2-1, t = Math.random()*Math.PI*2, r = Math.cbrt(Math.random())*(0.55+0.45*Math.random());
+  const s = Math.sqrt(1-u*u); pts.push({x:s*Math.cos(t)*r, y:u*r, z:s*Math.sin(t)*r, b:Math.random()});
+}
+pts.sort((a,b) => (Math.round(a.y*12)-Math.round(b.y*12)) || (Math.atan2(a.z,a.x)-Math.atan2(b.z,b.x)));
+let ang = 0, angX = 0.25;
+function frame(){
+  const want = transient === 'Listening' ? 1 : transient === 'Speaking' ? 0.8 : base === 'Halted' ? 0.05 : base === 'Paused' ? 0.12 : base === 'Holding' ? 0.45 : 0.28;
+  energy += (want - energy) * 0.05;
+  for (let k=0;k<3;k++) rgb[k] += (target[k]-rgb[k])*0.06;
+  const col = rgb.map(Math.round).join(',');
+  cx.clearRect(0,0,W,H);
+  const small = W < 680, R = Math.min(W, H) * (small ? 0.3 : 0.36), ox = W/2, oy = H * (small ? 0.3 : 0.42);
+  const g = cx.createRadialGradient(ox,oy,0,ox,oy,R*1.4);
+  g.addColorStop(0,`rgba(${col},${0.22+energy*0.15})`); g.addColorStop(1,'rgba(0,0,0,0)');
+  cx.fillStyle = g; cx.fillRect(0,0,W,H);
+  ang += 0.0012 + energy*0.004;
+  const ca = Math.cos(ang), sa = Math.sin(ang), cb = Math.cos(angX), sb = Math.sin(angX);
+  const t = performance.now()/1000, pulse = 1 + Math.sin(t*(2+energy*6))*0.015*(1+energy*3);
+  const P = pts.map(p => {
+    let x = p.x*ca - p.z*sa, z = p.x*sa + p.z*ca, y = p.y*cb - z*sb; z = p.y*sb + z*cb;
+    const f = 2.4/(2.4+z); return [ox + x*R*f*pulse, oy + y*R*f*pulse, z, p.b];
+  });
+  cx.lineWidth = 0.6;
+  const L2 = (R*0.13)**2;
+  for (let i=0;i<P.length;i++){ const a = P[i];
+    for (let j=i+1;j<Math.min(P.length,i+28);j++){ const b = P[j], dx=a[0]-b[0], dy=a[1]-b[1], d = dx*dx+dy*dy;
+      if (d < L2){ cx.strokeStyle = `rgba(${col},${(1-d/L2)*0.5})`; cx.beginPath(); cx.moveTo(a[0],a[1]); cx.lineTo(b[0],b[1]); cx.stroke(); } } }
+  for (const p of P){ const s = (1.3 - p[2]*0.6) * (0.5+p[3]*0.8), tw = 0.5 + 0.5*Math.sin(t*3 + p[3]*20)*energy;
+    cx.fillStyle = `rgba(${col},${Math.min(1,(0.45 + (1-p[2])*0.3)*(0.6+tw*0.6))})`;
+    cx.beginPath(); cx.arc(p[0],p[1],s,0,7); cx.fill(); }
+  requestAnimationFrame(frame);
+}
+addEventListener('resize', sizeOrb);
+
+/* ---------- voice / commands ---------- */
+function say(text, from){
+  const div = document.createElement('div'); div.className = from; div.textContent = (from === 'you' ? '› ' : '◆ ') + text;
+  $('transcript').appendChild(div); $('transcript').scrollTop = 1e9;
+}
+function speak(text){
+  say(text, 'bot');
+  if (!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text); u.rate = 1.05;
+  transient = 'Speaking'; renderStates(); statusline();
+  u.onend = () => { transient = null; renderStates(); statusline(); };
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function answer(q){
+  q = q.toLowerCase();
+  const pl = D.equity - D.cfg.starting_capital;
+  if (/backtest/.test(q)) { setMode('backtest'); return D.backtest ? `Backtest loaded. Unseen test ended at ${usd(D.backtest.periods.at(-1).end)}.` : 'No backtest has been run yet.'; }
+  if (/paper|live|home/.test(q)) { setMode('paper'); return 'Back to paper trading.'; }
+  if (/position|holding/.test(q)) return D.positions.length ? 'Holding ' + D.positions.map(p => `${p.qty} ${p.symbol}, ${p.pnl >= 0 ? 'up' : 'down'} ${usd(Math.abs(p.pnl))}`).join('; ') + '.' : 'No open positions right now.';
+  if (/profit|p\/?l|money|value|equity|balance|cash/.test(q)) return `Account value is ${usd(D.equity)}, ${pl >= 0 ? 'up' : 'down'} ${usd(Math.abs(pl))} from ${usd(D.cfg.starting_capital)}. Cash ${usd(D.cash)}.`;
+  if (/watch/.test(q)) { const b = D.watchlist.filter(w=>w.buy).map(w=>w.symbol); return D.watchlist.length ? `${D.watchlist.length} stocks on the watchlist${b.length ? ', buy signals on ' + b.join(', ') : ', no buy signals'}.` : 'Watchlist is empty until the next market-day run.'; }
+  if (/trade|history/.test(q)) { openPanel('trades'); return `${D.stats.n} closed trades${D.stats.win_rate != null ? ', win rate ' + Math.round(D.stats.win_rate*100) + ' percent' : ''}.`; }
+  if (/log|terminal/.test(q)) { openPanel('log'); return 'Opening the bot terminal.'; }
+  if (/chart|graph/.test(q)) { openPanel('chart'); return 'Here is the equity chart.'; }
+  if (/rule|strategy/.test(q)) { openPanel('rules'); return 'Here are the strategy rules.'; }
+  if (/run|start/.test(q)) { window.open(GH + '/actions/workflows/bot.yml', '_blank'); return 'Opening GitHub Actions — press Run workflow.'; }
+  if (/pause|stop|resume/.test(q)) { window.open(GH + '/edit/main/config.yaml', '_blank'); return 'Opening config — set paused to true or false and commit.'; }
+  if (/status|how|doing|hello|hey/.test(q)) return D.halted ? 'The bot is halted. ' + D.halt_reason : `Bot is ${D.paused ? 'paused' : 'active'}. ${D.positions.length} positions open, account at ${usd(D.equity)}. Last run ${D.last_run || 'never'}.`;
+  return 'Try: status, positions, profit, watchlist, trades, backtest, or log.';
+}
+function handle(q){ if (!q.trim()) return; say(q, 'you'); speak(answer(q)); }
+$('ask').onsubmit = e => { e.preventDefault(); handle($('q').value); $('q').value = ''; };
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function talk(){
+  if (!SR) { $('q').focus(); say('Voice input is not supported in this browser — type instead.', 'bot'); return; }
+  if (rec) { rec.stop(); return; }
+  rec = new SR(); rec.lang = 'en-US'; rec.interimResults = false;
+  transient = 'Listening'; renderStates(); statusline(); $('talk').classList.add('live'); $('talk').textContent = 'Listening…';
+  rec.onresult = e => handle(e.results[0][0].transcript);
+  rec.onend = () => { rec = null; if (transient === 'Listening') transient = null; renderStates(); statusline(); $('talk').classList.remove('live'); $('talk').textContent = 'Tap to talk'; };
+  rec.start();
+}
+$('talk').onclick = talk;
+
+/* ---------- boot ---------- */
+let saved = 'paper'; try { saved = localStorage.getItem('pennyMode') || 'paper'; } catch(e) {}
+renderStates(); setMode(saved); sizeOrb(); orbColor(); rgb = target.slice(); frame();
+</script>
+</body>
+</html>

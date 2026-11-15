@@ -29,6 +29,7 @@ STATE_F = DATA / "state.json"
 TRADES_F = DATA / "trades.csv"
 EQUITY_F = DATA / "equity.csv"
 LOG_F = DATA / "log.txt"
+BACKTEST_F = DATA / "backtest.json"
 CT = ZoneInfo("America/Chicago")
 TRADE_FIELDS = ["symbol", "qty", "entry_date", "entry_price", "exit_date",
                 "exit_price", "pnl", "reason"]
@@ -631,61 +632,37 @@ def build_dashboard(cfg, state, data):
     for e in eq_vals:
         peak = max(peak, e)
         mdd = max(mdd, peak - e)
-    if state.get("halted"):
-        badge = f'<span class="badge off">STOPPED</span> {html.escape(state.get("halt_reason",""))}'
-    elif cfg.get("paused"):
-        badge = '<span class="badge pause">PAUSED</span> no new buys'
-    else:
-        badge = '<span class="badge on">ACTIVE</span>'
-    tiles = [
-        ("Fake account value", f"${equity:,.2f}"),
-        ("Profit / loss", money(equity - start)),
-        ("If you'd just held IWM", money(iwm_ret) if iwm_ret is not None else "—"),
-        ("Cash", f"${cash:,.2f}"),
-        ("Trades closed", str(len(pnls))),
-        ("Win rate", f"{len(wins)/len(pnls):.0%}" if pnls else "—"),
-        ("Avg win / avg loss", f"{money(sum(wins)/len(wins)) if wins else '—'} / "
-                               f"{money(sum(losses)/len(losses)) if losses else '—'}"),
-        ("Biggest loss", money(min(pnls)) if pnls else "—"),
-        ("Max drawdown", f"${mdd:,.2f}"),
-    ]
-    tiles_html = "".join(f'<div class="tile"><span>{a}</span><b>{b}</b></div>' for a, b in tiles)
-    pos_rows = "".join(
-        f"<tr><td><b>{s}</b></td><td>{p['qty']}</td><td>${p['entry_price']:.2f}</td>"
-        f"<td>${p.get('price', p['entry_price']):.2f}</td>"
-        f"<td>{money((p.get('price', p['entry_price']) - p['entry_price']) * p['qty'])}</td>"
-        f"<td>${p['stop']:.2f} / ${p['target']:.2f}</td><td>{p['entry_date']}"
-        f"{'' if p.get('filled') else ' (waiting to fill)'}</td></tr>"
-        for s, p in state["positions"].items()) or '<tr><td colspan="7">None right now</td></tr>'
-    trade_rows = "".join(
-        f"<tr><td>{t['exit_date']}</td><td><b>{t['symbol']}</b></td><td>{t['qty']}</td>"
-        f"<td>${float(t['entry_price']):.2f}</td><td>${float(t['exit_price']):.2f}</td>"
-        f"<td>{money(float(t['pnl']))}</td><td>{t['reason']}</td></tr>"
-        for t in reversed(trades[-50:])) or '<tr><td colspan="7">No closed trades yet</td></tr>'
-    watch_rows = "".join(
-        f"<tr><td><b>{w['symbol']}</b></td><td>{html.escape(w['note'])}</td>"
-        f"<td>{'BUY' if w['buy'] else ''}</td></tr>"
-        for w in state.get("watchlist", [])) or '<tr><td colspan="3">Made on the first market-day run</td></tr>'
-    logs = LOG_F.read_text().splitlines()[-40:] if LOG_F.exists() else []
-    logs += _log_lines
-    body = f"""
-<h1>Penny Stock Paper Bot</h1>
-<p>{badge}<br><span class="note">FAKE MONEY ONLY &middot; last run {state.get('last_run','—')}
-&middot; <a href="backtest.html">Backtest results</a></span></p>
-<div class="tiles">{tiles_html}</div>
-<h2>Fake account value vs. just holding IWM</h2>
-{svg_chart(labels, [("Bot", "#4cd38a", eq_vals), ("IWM (buy & hold)", "#9ecbff", iwm_vals)])}
-<h2>Open positions</h2>
-<table><tr><th>Stock</th><th>Shares</th><th>Bought</th><th>Now</th><th>P/L</th><th>Stop / target</th><th>Date</th></tr>{pos_rows}</table>
-<h2>Closed trades</h2>
-<table><tr><th>Date</th><th>Stock</th><th>Shares</th><th>Buy</th><th>Sell</th><th>P/L</th><th>Why</th></tr>{trade_rows}</table>
-<h2>Today's watchlist</h2>
-<table><tr><th>Stock</th><th>Why it's on the list</th><th></th></tr>{watch_rows}</table>
-<h2>Bot log</h2><pre>{html.escape(chr(10).join(logs[-40:]))}</pre>
-<p class="note">Rules: stocks $1–$5 on NYSE/Nasdaq, buy above the 20-day average on 1.5x volume,
-sell at +8% / -4% / 5 days. Max 3 stocks, $35 each, $2 risk per trade, stop for the day at -$5,
-stop completely at -$15 from peak.</p>"""
-    (DOCS / "index.html").write_text(page("Penny Bot", body))
+    logs = LOG_F.read_text().splitlines()[-120:] if LOG_F.exists() else []
+    logs += [l for l in _log_lines if l not in logs]
+    pos_list = [{"symbol": s, "qty": p["qty"], "entry": p["entry_price"],
+                 "price": p.get("price", p["entry_price"]),
+                 "pnl": round((p.get("price", p["entry_price"]) - p["entry_price"]) * p["qty"], 2),
+                 "stop": p.get("stop"), "target": p.get("target"),
+                 "date": p["entry_date"], "filled": bool(p.get("filled"))}
+                for s, p in state["positions"].items()]
+    bt = json.loads(BACKTEST_F.read_text()) if BACKTEST_F.exists() else None
+    payload = {
+        "repo": os.environ.get("GITHUB_REPOSITORY", "southernedgeelectrical-svg/penny-bot"),
+        "cfg": cfg, "equity": equity, "cash": cash, "peak": max([start] + eq_vals + [equity]),
+        "halted": bool(state.get("halted")), "halt_reason": state.get("halt_reason", ""),
+        "paused": bool(cfg.get("paused")), "last_run": state.get("last_run", ""),
+        "equity_hist": hist, "iwm_hist": iwm_vals, "iwm_ret": iwm_ret,
+        "positions": pos_list, "trades": trades[-200:], "watchlist": state.get("watchlist", []),
+        "log": logs[-120:], "backtest": bt,
+        "stats": {"n": len(pnls), "win_rate": len(wins) / len(pnls) if pnls else None,
+                  "avg_win": sum(wins) / len(wins) if wins else None,
+                  "avg_loss": sum(losses) / len(losses) if losses else None,
+                  "worst": min(pnls) if pnls else None, "mdd": mdd},
+    }
+    write_command_center(payload)
+
+
+def write_command_center(payload):
+    """Fill the HUD template (command_center.html) with the bot's data -> docs/index.html."""
+    DOCS.mkdir(exist_ok=True)
+    blob = json.dumps(payload, default=str).replace("</", "<\\/")
+    tpl = (ROOT / "command_center.html").read_text()
+    (DOCS / "index.html").write_text(tpl.replace("/*__DATA__*/", blob))
 
 
 def write_backtest_page(cfg, results, n_syms):
@@ -715,6 +692,20 @@ def write_backtest_page(cfg, results, n_syms):
                  "usually worse than a backtest. Treat the paper-trading results over 2–3 months "
                  "as the real test.</p>")
     (DOCS / "backtest.html").write_text(page("Backtest", "".join(parts)))
+    DATA.mkdir(exist_ok=True)
+    BACKTEST_F.write_text(json.dumps({
+        "run": f"{now_ct():%Y-%m-%d %H:%M} CT", "stocks": n_syms,
+        "periods": [{"name": name, "start": str(ds[0]), "end_date": str(ds[-1]),
+                     "end": round(st["end"], 2), "bench_end": round(bench[-1], 2),
+                     "curve": [round(v, 2) for v in curve[::max(1, len(curve) // 120)]],
+                     "trades": st["trades"], "win_rate": st["win_rate"],
+                     "avg_win": st["avg_win"], "avg_loss": st["avg_loss"],
+                     "max_dd": st["max_dd"], "halted": st["halted"]}
+                    for name, ds, curve, bench, st, _ in results]}, default=str))
+    try:  # refresh the command center so the Backtest toggle shows the new numbers
+        build_dashboard(cfg, load_state(), None)
+    except Exception as e:
+        log(f"dashboard error: {e}")
 
 
 # ----------------------------------------------------------------- main
