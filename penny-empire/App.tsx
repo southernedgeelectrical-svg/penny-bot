@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -57,14 +57,21 @@ function Game() {
   const [buyMode, setBuyMode] = useState<BuyMode>(1);
 
   const onBuy = useCallback((id: string) => buy(id, buyMode), [buy, buyMode]);
+  const { width, height } = useWindowDimensions();
 
   if (!loaded) return null;
 
   const { rank, next, progress } = rankFor(game.runEarned);
   const tapValue = perTap(game);
 
-  return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+  // Tablets and landscape screens: coin on the left, shop on the right.
+  const wide = width >= 700 && width > height;
+  const coinSize = Math.round(
+    wide ? Math.min(300, height * 0.4, width * 0.24) : Math.min(width >= 600 ? 260 : 180, height * 0.24),
+  );
+
+  const coinArea = (
+    <>
       <View style={styles.header}>
         <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
           {formatMoney(Math.floor(game.balance))}
@@ -76,7 +83,7 @@ function Game() {
         </View>
       </View>
 
-      <TapCoin perTap={tapValue} rank={rank.id} onTap={tap} />
+      <TapCoin perTap={tapValue} rank={rank.id} onTap={tap} size={coinSize} />
 
       <View style={styles.rank}>
         <View style={styles.rankRow}>
@@ -91,7 +98,11 @@ function Game() {
           </>
         )}
       </View>
+    </>
+  );
 
+  const shop = (
+    <>
       <View style={styles.tabs}>
         {TABS.map((t) => {
           const active = tab === t.key;
@@ -128,6 +139,22 @@ function Game() {
           ))
         )}
       </ScrollView>
+    </>
+  );
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      {wide ? (
+        <View style={styles.wideRow}>
+          <View style={styles.widePlay}>{coinArea}</View>
+          <View style={styles.wideShop}>{shop}</View>
+        </View>
+      ) : (
+        <View style={styles.narrow}>
+          {coinArea}
+          {shop}
+        </View>
+      )}
 
       <Modal visible={offlineEarned !== null} transparent animationType="fade" onRequestClose={dismissOffline}>
         <View style={styles.backdrop}>
@@ -202,6 +229,10 @@ function UpgradeRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  narrow: { flex: 1, width: '100%', maxWidth: 680, alignSelf: 'center' },
+  wideRow: { flex: 1, flexDirection: 'row', paddingHorizontal: 12, gap: 12 },
+  widePlay: { flex: 1, justifyContent: 'center' },
+  wideShop: { flex: 1.15, maxWidth: 680, paddingTop: 12 },
   header: { alignItems: 'center', paddingTop: 8, paddingHorizontal: 16 },
   balance: {
     color: colors.gold,
@@ -225,7 +256,7 @@ const styles = StyleSheet.create({
   },
   chipIcon: { fontSize: 12 },
   chipText: { color: colors.text, fontFamily: fonts.bodyHeavy, fontSize: 13 },
-  rank: { alignItems: 'stretch', marginHorizontal: 60, gap: 4, marginBottom: 10 },
+  rank: { alignItems: 'stretch', width: '100%', maxWidth: 300, alignSelf: 'center', paddingHorizontal: 16, gap: 4, marginBottom: 10 },
   rankRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   rankName: { color: colors.goldLight, fontFamily: fonts.display, fontSize: 16, letterSpacing: 0.5 },
   rankNext: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, textAlign: 'center' },

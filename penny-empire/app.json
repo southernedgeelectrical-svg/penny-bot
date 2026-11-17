@@ -3,12 +3,12 @@
     "name": "Penny Empire",
     "slug": "penny-empire",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0B1F17",
     "ios": {
-      "bundleIdentifier": "com.yourcompany.pennyempire",
+      "bundleIdentifier": "com.southernedgeelectrical.pennyempire",
       "buildNumber": "1",
       "supportsTablet": true,
       "config": {
@@ -16,7 +16,7 @@
       }
     },
     "android": {
-      "package": "com.yourcompany.pennyempire",
+      "package": "com.southernedgeelectrical.pennyempire",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0B1F17",

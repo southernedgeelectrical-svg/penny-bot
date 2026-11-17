@@ -6,7 +6,9 @@ export function formatNumber(n: number): string {
   if (n < 0) return '-' + formatNumber(-n);
   if (n < 1000) {
     if (Number.isInteger(n)) return String(n);
-    return n < 10 ? n.toFixed(2).replace(/\.?0+$/, '') : n.toFixed(1).replace(/\.0$/, '');
+    if (n < 10) return n.toFixed(2).replace(/\.?0+$/, '');
+    if (n < 100) return n.toFixed(1).replace(/\.0$/, '');
+    return String(Math.round(n));
   }
   const tier = Math.floor(Math.log10(n) / 3);
   if (tier >= SUFFIXES.length) return n.toExponential(2).replace('+', '');

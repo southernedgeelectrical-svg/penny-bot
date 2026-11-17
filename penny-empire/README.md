@@ -1,6 +1,8 @@
 # Penny Empire 💰
 
-A tap-to-earn idle tycoon game for iOS (and Android), built with Expo / React Native.
+A tap-to-earn idle tycoon game for **Android phones and tablets** (it can also be built for iPhone later), built with Expo / React Native.
+
+On tablets and in landscape, the coin sits on the left and the shop on the right.
 
 You start with **$0**. Tap the coin to earn cash, buy upgrades, and grow an empire.
 
@@ -45,33 +47,54 @@ src/theme.ts                 Colors, gradients, fonts
 src/game/__tests__/          Unit tests for the game rules
 ```
 
-## Running it
+## Running it (for development)
 
 ```bash
 cd penny-empire
 npm install
-npx expo start          # scan the QR code with the Expo Go app on your iPhone
+npx expo start          # scan the QR code with the Expo Go app on your Android phone/tablet
 npm test                # run game-rule tests
 npm run typecheck
 npx expo lint
 ```
 
-## Publishing to the App Store
+## Installing it on your Android tablet (APK)
 
-You don't need a Mac. Expo's EAS service builds and uploads the iOS app in the cloud.
+Expo's free EAS service builds the Android app in the cloud. You don't need Android Studio.
 
-1. Join the [Apple Developer Program](https://developer.apple.com/programs/) ($99/year).
-2. In `app.json`, change `ios.bundleIdentifier` and `android.package` from
-   `com.yourcompany.pennyempire` to your own reverse-domain ID (it must be unique on the App Store).
-3. Create a free Expo account, then:
+1. Create a free account at [expo.dev](https://expo.dev).
+2. From the `penny-empire` folder:
    ```bash
    npx eas-cli@latest login
-   npx eas-cli@latest build --platform ios --profile production
-   npx eas-cli@latest submit --platform ios
+   npx eas-cli@latest build --platform android --profile preview
    ```
-   EAS will walk you through creating the signing certificates with your Apple account.
-4. In [App Store Connect](https://appstoreconnect.apple.com), add screenshots, a description,
-   a privacy policy URL, and the age rating, then submit for review.
-   - Privacy: the game collects no data (everything is stored on the device).
+3. When the build finishes (about 10–20 minutes), EAS gives you a link and a QR code.
+   Open it on your tablet, download the `.apk`, and tap it to install.
+   Android will ask you to allow installing apps from your browser the first time.
 
-Before submitting, check that the name "Penny Empire" isn't already taken on the App Store, and rename it in `app.json` if needed.
+## Publishing to Google Play
+
+1. Build the Play Store version (an `.aab` bundle):
+   ```bash
+   npx eas-cli@latest build --platform android --profile production
+   ```
+2. In the [Google Play Console](https://play.google.com/console), click **Create app**, name it, and choose **Game**, **Free**.
+3. The first upload must be done by hand: go to **Testing → Internal testing → Create release** and upload the `.aab` from step 1.
+   (Later releases can be uploaded with `npx eas-cli@latest submit --platform android` once a Google service account key is set up.)
+4. Complete the store listing: description, the 512×512 icon, a 1024×500 feature graphic, and phone **and tablet** screenshots.
+5. Complete **App content**:
+   - Privacy policy URL (required, even though the game collects no data).
+   - Data safety: no data collected or shared (progress is stored only on the device).
+   - Ads: none. Content rating questionnaire: a casual game with simulated money and no real gambling.
+   - Target audience: choose 13+ unless you want to meet the extra rules for children's apps.
+6. New personal developer accounts must run a **closed test with at least 12 testers for 14 days** before going to Production. Organization accounts can skip this.
+7. Promote the release to **Production** and submit for review.
+
+The package name is `com.southernedgeelectrical.pennyempire` (in `app.json`).
+**It can never be changed after the first upload to Google Play**, so change it now if you want a different one.
+Bump `version` in `app.json` for each release; `versionCode` is increased automatically by the production build profile.
+
+## Building for iPhone later (optional)
+
+The same code also builds for iPhone and iPad if you ever get an Apple developer account:
+`npx eas-cli@latest build --platform ios` then `npx eas-cli@latest submit --platform ios`.

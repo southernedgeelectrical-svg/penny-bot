@@ -7,9 +7,7 @@ import { CoinRank } from '../game/ranks';
 import { colors, fonts } from '../theme';
 import { CoinArt, COIN_PALETTES } from './CoinArt';
 
-const SIZE = 180;
-const STAGE = 300;
-const STAGE_H = 260;
+export const DEFAULT_COIN_SIZE = 180;
 const MAX_FLOATS = 10;
 const MAX_PARTICLES = 36;
 const PARTICLES_PER_TAP = 5;
@@ -57,7 +55,20 @@ function makeParticle(id: number, x: number, y: number): Particle {
   };
 }
 
-function TapCoinImpl({ perTap, rank, onTap }: { perTap: number; rank: CoinRank['id']; onTap: () => void }) {
+function TapCoinImpl({
+  perTap,
+  rank,
+  onTap,
+  size = DEFAULT_COIN_SIZE,
+}: {
+  perTap: number;
+  rank: CoinRank['id'];
+  onTap: () => void;
+  size?: number;
+}) {
+  const SIZE = size;
+  const STAGE = Math.round(size * 1.67);
+  const STAGE_H = Math.round(size * 1.45);
   const [tapScale] = useState(() => new Animated.Value(1));
   const [breath] = useState(() => new Animated.Value(0));
   const [spin] = useState(() => new Animated.Value(0));
@@ -122,7 +133,7 @@ function TapCoinImpl({ perTap, rank, onTap }: { perTap: number; rank: CoinRank['
         );
       }
     },
-    [onTap, perTap, tapScale],
+    [onTap, perTap, tapScale, SIZE, STAGE, STAGE_H],
   );
 
   const palette = COIN_PALETTES[rank];
@@ -130,16 +141,19 @@ function TapCoinImpl({ perTap, rank, onTap }: { perTap: number; rank: CoinRank['
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   return (
-    <View style={styles.stage}>
-      <Animated.View style={[styles.rays, { transform: [{ rotate }] }]} pointerEvents="none">
-        <Rays color={palette.faceMid} />
+    <View style={[styles.stage, { width: STAGE, height: STAGE_H }]}>
+      <Animated.View
+        style={[styles.rays, { top: (STAGE_H - STAGE) / 2, width: STAGE, height: STAGE, transform: [{ rotate }] }]}
+        pointerEvents="none"
+      >
+        <Rays color={palette.faceMid} stage={STAGE} />
       </Animated.View>
 
       <Animated.View
         pointerEvents="none"
         style={[
           styles.flash,
-          { borderColor: palette.rimLight },
+          { width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderColor: palette.rimLight },
           {
             opacity: flash.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] }),
             transform: [{ scale: flash.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.7] }) }],
@@ -148,7 +162,7 @@ function TapCoinImpl({ perTap, rank, onTap }: { perTap: number; rank: CoinRank['
       />
 
       <Pressable {...webNoPressDelay} onPressIn={handlePress} accessibilityRole="button" accessibilityLabel={`Tap to earn ${formatMoney(perTap)}`}>
-        <Animated.View style={[styles.coin, { transform: [{ scale }] }]}>
+        <Animated.View style={[styles.coin, { width: SIZE, height: SIZE, borderRadius: SIZE / 2, transform: [{ scale }] }]}>
           <CoinArt size={SIZE} rank={rank} />
         </Animated.View>
       </Pressable>
@@ -206,7 +220,7 @@ function TapCoinImpl({ perTap, rank, onTap }: { perTap: number; rank: CoinRank['
 }
 
 /** Soft light rays fanning out behind the coin. */
-const Rays = memo(function Rays({ color }: { color: string }) {
+const Rays = memo(function Rays({ color, stage: STAGE }: { color: string; stage: number }) {
   const n = 14;
   const c = STAGE / 2;
   const r = STAGE / 2;
@@ -237,12 +251,9 @@ const Rays = memo(function Rays({ color }: { color: string }) {
 export const TapCoin = memo(TapCoinImpl);
 
 const styles = StyleSheet.create({
-  rays: { position: 'absolute', left: 0, top: (STAGE_H - STAGE) / 2, width: STAGE, height: STAGE },
-  stage: { width: STAGE, height: STAGE_H, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginVertical: -10 },
+  rays: { position: 'absolute', left: 0 },
+  stage: { alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginVertical: -10 },
   coin: {
-    width: SIZE,
-    height: SIZE,
-    borderRadius: SIZE / 2,
     shadowColor: '#000',
     shadowOpacity: 0.5,
     shadowRadius: 18,
@@ -251,9 +262,6 @@ const styles = StyleSheet.create({
   },
   flash: {
     position: 'absolute',
-    width: SIZE,
-    height: SIZE,
-    borderRadius: SIZE / 2,
     borderWidth: 6,
   },
   particle: { position: 'absolute', borderWidth: 1.5, overflow: 'hidden' },
