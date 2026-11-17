@@ -19,6 +19,7 @@ import {
   tick,
 } from '../economy';
 import { formatMoney, formatNumber } from '../format';
+import { rankFor } from '../ranks';
 
 const T0 = 1_700_000_000_000;
 const withBalance = (balance: number, extra: Partial<GameState> = {}): GameState => ({
@@ -192,5 +193,24 @@ describe('formatting', () => {
 
   it('prefixes money', () => {
     expect(formatMoney(1500)).toBe('$1.50K');
+  });
+});
+
+describe('coin ranks', () => {
+  it('starts as a copper penny and upgrades with earnings', () => {
+    expect(rankFor(0).rank.id).toBe('copper');
+    expect(rankFor(9_999).rank.id).toBe('copper');
+    expect(rankFor(10_000).rank.id).toBe('silver');
+    expect(rankFor(1e6).rank.id).toBe('gold');
+    expect(rankFor(1e12).rank.id).toBe('diamond');
+    expect(rankFor(1e12).next).toBeNull();
+  });
+
+  it('progress toward the next rank stays between 0 and 1', () => {
+    for (const n of [0, 5, 500, 9_999, 10_000, 5e5, 9e9]) {
+      const { progress } = rankFor(n);
+      expect(progress).toBeGreaterThanOrEqual(0);
+      expect(progress).toBeLessThanOrEqual(1);
+    }
   });
 });

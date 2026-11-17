@@ -1,9 +1,14 @@
+import { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { GOLD_BAR_BONUS, PRESTIGE_THRESHOLD } from '../game/definitions';
 import { GameState, goldBarsForRun, prestigeMultiplier } from '../game/economy';
 import { formatMoney, formatNumber } from '../game/format';
-import { colors } from '../theme';
+import { colors, fonts, goldGradient } from '../theme';
 import { confirm } from './confirm';
+import { GameButton } from './GameButton';
+import { GoldBar } from './GoldBar';
+import { ProgressBar } from './ProgressBar';
 
 interface Props {
   game: GameState;
@@ -13,30 +18,40 @@ interface Props {
 
 export function PrestigePanel({ game, onPrestige, onReset }: Props) {
   const bars = goldBarsForRun(game.runEarned);
+  const prevBarAt = Math.pow(bars, 2) * PRESTIGE_THRESHOLD;
   const nextBarAt = Math.pow(bars + 1, 2) * PRESTIGE_THRESHOLD;
   const newMultiplier = 1 + (game.goldBars + bars) * GOLD_BAR_BONUS;
+  const progress = (game.runEarned - (bars > 0 ? prevBarAt : 0)) / (nextBarAt - (bars > 0 ? prevBarAt : 0));
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.card}>
-        <Text style={styles.heading}>🥇 Gold Bars: {formatNumber(game.goldBars)}</Text>
-        <Text style={styles.body}>
-          Each gold bar permanently boosts all income by {GOLD_BAR_BONUS * 100}%. Current bonus: ×
-          {prestigeMultiplier(game).toFixed(1)}
-        </Text>
-      </View>
+      <LinearGradient colors={['#3B2A05', '#241903']} style={[styles.card, styles.vault]}>
+        <GoldBar size={84} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.vaultLabel}>YOUR VAULT</Text>
+          <Text style={styles.vaultCount}>{formatNumber(game.goldBars)} Gold Bars</Text>
+          <Text style={styles.vaultBonus}>All income ×{prestigeMultiplier(game).toFixed(1)}</Text>
+        </View>
+      </LinearGradient>
 
-      <View style={styles.card}>
-        <Text style={styles.heading}>💼 Cash Out</Text>
+      <Card title="Cash Out">
         <Text style={styles.body}>
-          Sell your empire and start over from $0 — keeping your gold bars. Earned this run: {formatMoney(game.runEarned)}
+          Sell your empire and start again from a single penny. You keep your gold bars, and each one adds{' '}
+          <Text style={styles.highlight}>+{GOLD_BAR_BONUS * 100}% income forever</Text>.
         </Text>
-        <Text style={styles.body}>
+        <View style={styles.statLine}>
+          <Text style={styles.body}>Earned this run</Text>
+          <Text style={styles.statValue}>{formatMoney(game.runEarned)}</Text>
+        </View>
+        <ProgressBar progress={progress} colors={goldGradient} height={12} />
+        <Text style={styles.small}>
           {bars > 0
-            ? `Cash out now for ${formatNumber(bars)} gold bar${bars === 1 ? '' : 's'} (bonus becomes ×${newMultiplier.toFixed(1)}). Next bar at ${formatMoney(nextBarAt)} earned.`
-            : `Earn ${formatMoney(PRESTIGE_THRESHOLD)} in one run to get your first gold bar.`}
+            ? `Next gold bar at ${formatMoney(nextBarAt)} · cashing out now makes income ×${newMultiplier.toFixed(1)}`
+            : `First gold bar at ${formatMoney(PRESTIGE_THRESHOLD)} earned`}
         </Text>
-        <Pressable
+        <GameButton
+          variant="gold"
+          shimmer={bars > 0}
           disabled={bars <= 0}
           onPress={() =>
             confirm(
@@ -46,18 +61,19 @@ export function PrestigePanel({ game, onPrestige, onReset }: Props) {
               onPrestige,
             )
           }
-          style={({ pressed }) => [styles.button, bars <= 0 && styles.disabled, pressed && { opacity: 0.75 }]}
+          style={{ marginTop: 4 }}
         >
-          <Text style={styles.buttonLabel}>{bars > 0 ? `Cash out for ${formatNumber(bars)} 🥇` : 'Not yet'}</Text>
-        </Pressable>
-      </View>
+          <Text style={[styles.buttonLabel, bars <= 0 && { color: colors.muted }]}>
+            {bars > 0 ? `CASH OUT FOR ${formatNumber(bars)} GOLD BAR${bars === 1 ? '' : 'S'}` : 'KEEP EARNING'}
+          </Text>
+        </GameButton>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.heading}>📊 Stats</Text>
-        <Text style={styles.body}>All-time earnings: {formatMoney(game.allTimeEarned)}</Text>
-        <Text style={styles.body}>Total taps: {formatNumber(game.totalTaps)}</Text>
-        <Text style={styles.body}>Times cashed out: {game.prestigeCount}</Text>
-      </View>
+      <Card title="Stats">
+        <Stat label="All-time earnings" value={formatMoney(game.allTimeEarned)} />
+        <Stat label="Total taps" value={formatNumber(game.totalTaps)} />
+        <Stat label="Times cashed out" value={String(game.prestigeCount)} />
+      </Card>
 
       <Pressable
         onPress={() => confirm('Erase all progress?', 'This deletes everything, including gold bars.', 'Erase', onReset)}
@@ -69,27 +85,38 @@ export function PrestigePanel({ game, onPrestige, onReset }: Props) {
   );
 }
 
+function Card({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <LinearGradient colors={['#164535', colors.card, colors.cardEdge]} style={styles.card}>
+      <Text style={styles.heading}>{title}</Text>
+      {children}
+    </LinearGradient>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statLine}>
+      <Text style={styles.body}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  wrap: { gap: 10, paddingBottom: 24 },
-  card: {
-    backgroundColor: colors.bgRaised,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 6,
-  },
-  heading: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  body: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  button: {
-    marginTop: 6,
-    backgroundColor: colors.goldDark,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  disabled: { backgroundColor: colors.disabled, opacity: 0.7 },
-  buttonLabel: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  wrap: { gap: 12, paddingBottom: 24 },
+  card: { borderRadius: 20, borderWidth: 1, borderColor: colors.cardBorder, padding: 16, gap: 10 },
+  vault: { flexDirection: 'row', alignItems: 'center', gap: 14, borderColor: 'rgba(255,211,77,0.4)' },
+  vaultLabel: { color: colors.gold, fontFamily: fonts.display, fontSize: 12, letterSpacing: 2 },
+  vaultCount: { color: colors.goldLight, fontFamily: fonts.display, fontSize: 26 },
+  vaultBonus: { color: colors.green, fontFamily: fonts.bodyHeavy, fontSize: 14 },
+  heading: { color: colors.text, fontFamily: fonts.display, fontSize: 22 },
+  body: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
+  highlight: { color: colors.gold, fontFamily: fonts.bodyHeavy },
+  small: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
+  statLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statValue: { color: colors.text, fontFamily: fonts.display, fontSize: 18 },
+  buttonLabel: { color: '#4A2C00', fontFamily: fonts.display, fontSize: 17, letterSpacing: 0.5, paddingVertical: 4 },
   reset: { alignItems: 'center', paddingVertical: 10 },
-  resetLabel: { color: '#E57373', fontSize: 13 },
+  resetLabel: { color: colors.danger, fontFamily: fonts.body, fontSize: 13 },
 });

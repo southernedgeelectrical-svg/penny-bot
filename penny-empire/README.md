@@ -15,10 +15,20 @@ You start with **$0**. Tap the coin to earn cash, buy upgrades, and grow an empi
 | **Buy ×1 / ×10 / MAX** | Buy levels in bulk. |
 | **Cash Out (prestige)** | After earning $1M in a run, sell everything for **gold bars**. You restart from $0, but every gold bar permanently adds +10% to all income. |
 | **Offline earnings** | Businesses keep earning at 50% speed while the app is closed (up to 3 hours). |
+| **Coin ranks** | Your coin changes metal as you earn: Copper Penny → Silver Dollar → Gold Coin → Platinum → Diamond. Cashing out starts you back at a penny. |
 | **Autosave** | Progress saves to the device every 5 seconds and when the app is closed. |
 
 All tuning numbers (prices, outputs, star levels, prestige rate) live in
 [`src/game/definitions.ts`](src/game/definitions.ts). Change them there to rebalance the game.
+
+## Graphics
+
+- Everything is drawn in code (SVG + gradients), so it stays sharp on every screen with no image files to manage.
+- The tap coin is a minted coin with a ridged rim, embossed `$` and a glossy shine. It has rotating light rays behind it, a gentle "breathing" pulse, mini coins bursting from your finger on every tap, and a flash of light when it upgrades to a new metal.
+- Upgrade icons sit in badges that change color as they earn stars (bronze, silver, gold, ice, amethyst, ruby), with a progress bar toward the next star.
+- Chunky 3D buttons squish when pressed; affordable enhancements shimmer.
+- Fonts: Lilita One (headings and numbers) and Nunito (text), both free Google Fonts bundled with the app.
+- Colors live in `src/theme.ts`, coin metals in `src/components/CoinArt.tsx`.
 
 ## Project layout
 
@@ -29,7 +39,9 @@ src/game/economy.ts          Game rules (pure functions, no UI)
 src/game/useGame.ts          React state, game loop, autosave, offline earnings
 src/game/storage.ts          Saving/loading on the device
 src/game/format.ts           $1.23K / $4.56M number formatting
-src/components/              Coin, upgrade card, cash-out panel
+src/game/ranks.ts            Coin metal ranks
+src/components/              Coin art, tap effects, buttons, upgrade card, cash-out panel
+src/theme.ts                 Colors, gradients, fonts
 src/game/__tests__/          Unit tests for the game rules
 ```
 

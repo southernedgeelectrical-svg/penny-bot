@@ -8,8 +8,8 @@ import { loadGame, saveGame } from './storage';
 const AWAY_GAP_MS = 10_000;
 const TICK_MS = 100;
 const AUTOSAVE_MS = 5_000;
-/** Don't bother showing the "while you were away" popup for pocket change. */
-const MIN_OFFLINE_POPUP = 1;
+/** Only greet the player with the "while you were away" popup after a real break. */
+const MIN_AWAY_FOR_POPUP_MS = 60_000;
 
 interface Store {
   game: GameState;
@@ -29,8 +29,8 @@ type Action =
 
 function withOffline(store: Store, game: GameState, now: number): Store {
   const { state, earned } = economy.applyOffline(game, now);
-  const total = (store.offlineEarned ?? 0) + earned;
-  return { ...store, game: state, offlineEarned: total >= MIN_OFFLINE_POPUP ? total : store.offlineEarned };
+  const showPopup = earned > 0 && now - game.lastActive >= MIN_AWAY_FOR_POPUP_MS;
+  return { ...store, game: state, offlineEarned: showPopup ? (store.offlineEarned ?? 0) + earned : store.offlineEarned };
 }
 
 function reducer(store: Store, action: Action): Store {

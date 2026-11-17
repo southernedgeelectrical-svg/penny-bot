@@ -1,7 +1,11 @@
 import { useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useFonts } from 'expo-font';
+import { LilitaOne_400Regular } from '@expo-google-fonts/lilita-one';
+import { Nunito_700Bold, Nunito_900Black } from '@expo-google-fonts/nunito';
 import { EARNERS, TAP_UPGRADES, UpgradeDef } from './src/game/definitions';
 import {
   bulkCost,
@@ -16,25 +20,33 @@ import {
   upgradeOutput,
 } from './src/game/economy';
 import { formatMoney } from './src/game/format';
+import { rankFor } from './src/game/ranks';
 import { useGame } from './src/game/useGame';
+import { Background, Twinkle } from './src/components/Background';
+import { CoinArt } from './src/components/CoinArt';
+import { GameButton } from './src/components/GameButton';
+import { PrestigePanel } from './src/components/PrestigePanel';
+import { ProgressBar } from './src/components/ProgressBar';
 import { TapCoin } from './src/components/TapCoin';
 import { UpgradeCard } from './src/components/UpgradeCard';
-import { PrestigePanel } from './src/components/PrestigePanel';
-import { colors } from './src/theme';
+import { colors, fonts, goldGradient, greenGradient } from './src/theme';
 
 type Tab = 'tap' | 'business' | 'prestige';
 type BuyMode = 1 | 10 | 'max';
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'tap', label: '👆 Tap Power' },
-  { key: 'business', label: '🏢 Businesses' },
-  { key: 'prestige', label: '🥇 Cash Out' },
+const TABS: { key: Tab; icon: string; label: string }[] = [
+  { key: 'tap', icon: '👆', label: 'Tap Power' },
+  { key: 'business', icon: '🏢', label: 'Businesses' },
+  { key: 'prestige', icon: '🥇', label: 'Cash Out' },
 ];
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ LilitaOne_400Regular, Nunito_700Bold, Nunito_900Black });
   return (
     <SafeAreaProvider>
-      <Game />
+      <StatusBar style="light" />
+      <Background />
+      {fontsLoaded ? <Game /> : null}
     </SafeAreaProvider>
   );
 }
@@ -46,46 +58,68 @@ function Game() {
 
   const onBuy = useCallback((id: string) => buy(id, buyMode), [buy, buyMode]);
 
-  if (!loaded) {
-    return <View style={styles.screen} />;
-  }
+  if (!loaded) return null;
+
+  const { rank, next, progress } = rankFor(game.runEarned);
+  const tapValue = perTap(game);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <StatusBar style="light" />
-
       <View style={styles.header}>
         <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
           {formatMoney(Math.floor(game.balance))}
         </Text>
-        <Text style={styles.rates}>
-          {formatMoney(perTap(game))} per tap · {formatMoney(perSecond(game))} per sec
-          {game.goldBars > 0 ? ` · 🥇×${prestigeMultiplier(game).toFixed(1)}` : ''}
-        </Text>
+        <View style={styles.chips}>
+          <Chip icon="👆" text={`${formatMoney(tapValue)}/tap`} />
+          <Chip icon="⏱️" text={`${formatMoney(perSecond(game))}/sec`} />
+          {game.goldBars > 0 && <Chip icon="🥇" text={`×${prestigeMultiplier(game).toFixed(1)}`} />}
+        </View>
       </View>
 
-      <TapCoin perTap={perTap(game)} onTap={tap} />
+      <TapCoin perTap={tapValue} rank={rank.id} onTap={tap} />
+
+      <View style={styles.rank}>
+        <View style={styles.rankRow}>
+          <Twinkle size={12} />
+          <Text style={styles.rankName}>{rank.name}</Text>
+          <Twinkle size={12} />
+        </View>
+        {next && (
+          <>
+            <ProgressBar progress={progress} colors={goldGradient} height={6} />
+            <Text style={styles.rankNext}>Earn {formatMoney(next.minEarned)} this run to unlock the {next.name}</Text>
+          </>
+        )}
+      </View>
 
       <View style={styles.tabs}>
-        {TABS.map((t) => (
-          <Pressable key={t.key} onPress={() => setTab(t.key)} style={[styles.tab, tab === t.key && styles.tabActive]}>
-            <Text style={[styles.tabLabel, tab === t.key && styles.tabLabelActive]}>{t.label}</Text>
-          </Pressable>
-        ))}
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <Pressable key={t.key} onPress={() => setTab(t.key)} style={styles.tab}>
+              {active && <LinearGradient colors={greenGradient} style={[StyleSheet.absoluteFill, styles.tabActive]} />}
+              <Text style={styles.tabIcon}>{t.icon}</Text>
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {tab !== 'prestige' && (
         <View style={styles.buyModes}>
-          <Text style={styles.buyModesLabel}>Buy</Text>
-          {([1, 10, 'max'] as BuyMode[]).map((m) => (
-            <Pressable key={String(m)} onPress={() => setBuyMode(m)} style={[styles.mode, buyMode === m && styles.modeActive]}>
-              <Text style={[styles.modeLabel, buyMode === m && styles.modeLabelActive]}>{m === 'max' ? 'MAX' : `×${m}`}</Text>
-            </Pressable>
-          ))}
+          <Text style={styles.buyModesLabel}>BUY</Text>
+          {([1, 10, 'max'] as BuyMode[]).map((m) => {
+            const active = buyMode === m;
+            return (
+              <Pressable key={String(m)} onPress={() => setBuyMode(m)} style={[styles.mode, active && styles.modeActive]}>
+                <Text style={[styles.modeLabel, active && styles.modeLabelActive]}>{m === 'max' ? 'MAX' : `×${m}`}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       )}
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {tab === 'prestige' ? (
           <PrestigePanel game={game} onPrestige={prestige} onReset={reset} />
         ) : (
@@ -97,17 +131,29 @@ function Game() {
 
       <Modal visible={offlineEarned !== null} transparent animationType="fade" onRequestClose={dismissOffline}>
         <View style={styles.backdrop}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Welcome back! 💰</Text>
-            <Text style={styles.modalBody}>Your businesses earned while you were away:</Text>
-            <Text style={styles.modalAmount}>{formatMoney(offlineEarned ?? 0)}</Text>
-            <Pressable onPress={dismissOffline} style={styles.modalButton}>
-              <Text style={styles.modalButtonLabel}>Collect</Text>
-            </Pressable>
-          </View>
+          <LinearGradient colors={['#1B5640', '#0E3326']} style={styles.modal}>
+            <View style={styles.modalCoin}>
+              <CoinArt size={96} rank={rank.id} />
+            </View>
+            <Text style={styles.modalTitle}>Welcome back!</Text>
+            <Text style={styles.modalBody}>Your businesses kept earning while you were away</Text>
+            <Text style={styles.modalAmount}>+{formatMoney(offlineEarned ?? 0)}</Text>
+            <GameButton variant="gold" shimmer onPress={dismissOffline} style={{ alignSelf: 'stretch' }}>
+              <Text style={styles.modalButtonLabel}>COLLECT</Text>
+            </GameButton>
+          </LinearGradient>
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function Chip({ icon, text }: { icon: string; text: string }) {
+  return (
+    <View style={styles.chip}>
+      <Text style={styles.chipIcon}>{icon}</Text>
+      <Text style={styles.chipText}>{text}</Text>
+    </View>
   );
 }
 
@@ -155,45 +201,86 @@ function UpgradeRow({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  header: { alignItems: 'center', paddingTop: 12, paddingHorizontal: 16 },
-  balance: { color: colors.gold, fontSize: 44, fontWeight: '900' },
-  rates: { color: colors.muted, fontSize: 14, marginTop: 2, textAlign: 'center' },
+  screen: { flex: 1 },
+  header: { alignItems: 'center', paddingTop: 8, paddingHorizontal: 16 },
+  balance: {
+    color: colors.gold,
+    fontFamily: fonts.display,
+    fontSize: 52,
+    textShadowColor: 'rgba(120, 70, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
+  },
+  chips: { flexDirection: 'row', gap: 6, marginTop: 2, flexWrap: 'wrap', justifyContent: 'center' },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  chipIcon: { fontSize: 12 },
+  chipText: { color: colors.text, fontFamily: fonts.bodyHeavy, fontSize: 13 },
+  rank: { alignItems: 'stretch', marginHorizontal: 60, gap: 4, marginBottom: 10 },
+  rankRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  rankName: { color: colors.goldLight, fontFamily: fonts.display, fontSize: 16, letterSpacing: 0.5 },
+  rankNext: { color: colors.muted, fontFamily: fonts.body, fontSize: 11, textAlign: 'center' },
   tabs: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    backgroundColor: colors.bgRaised,
-    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 16,
     padding: 4,
     gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.bgPressed },
-  tabLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+  tab: { flex: 1, paddingVertical: 7, borderRadius: 12, alignItems: 'center', overflow: 'hidden' },
+  tabActive: { borderRadius: 12 },
+  tabIcon: { fontSize: 16 },
+  tabLabel: { color: colors.muted, fontSize: 12, fontFamily: fonts.bodyHeavy },
   tabLabelActive: { color: colors.text },
   buyModes: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginTop: 10 },
-  buyModesLabel: { color: colors.muted, fontSize: 13, marginRight: 4 },
-  mode: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
-  modeActive: { backgroundColor: colors.greenDark, borderColor: colors.greenDark },
-  modeLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
-  modeLabelActive: { color: colors.text },
-  list: { flex: 1, marginTop: 10 },
-  listContent: { paddingHorizontal: 16, paddingBottom: 40 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  modal: {
-    backgroundColor: colors.bgRaised,
-    borderRadius: 18,
-    padding: 24,
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
-    maxWidth: 360,
-    borderWidth: 1,
-    borderColor: colors.border,
+  buyModesLabel: { color: colors.muted, fontFamily: fonts.display, fontSize: 13, marginRight: 4, letterSpacing: 1 },
+  mode: {
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  modalTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
-  modalBody: { color: colors.muted, fontSize: 14, textAlign: 'center' },
-  modalAmount: { color: colors.gold, fontSize: 34, fontWeight: '900', marginVertical: 6 },
-  modalButton: { backgroundColor: colors.greenDark, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 40 },
-  modalButtonLabel: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  modeActive: { backgroundColor: colors.gold, borderColor: colors.gold },
+  modeLabel: { color: colors.muted, fontFamily: fonts.display, fontSize: 14 },
+  modeLabelActive: { color: '#4A2C00' },
+  list: { flex: 1, marginTop: 10 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 2 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  modal: {
+    borderRadius: 26,
+    padding: 24,
+    paddingTop: 60,
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 2,
+    borderColor: 'rgba(255,211,77,0.5)',
+  },
+  modalCoin: { position: 'absolute', top: -48 },
+  modalTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 30 },
+  modalBody: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, textAlign: 'center' },
+  modalAmount: {
+    color: colors.gold,
+    fontFamily: fonts.display,
+    fontSize: 44,
+    marginVertical: 8,
+    textShadowColor: 'rgba(120, 70, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 0,
+  },
+  modalButtonLabel: { color: '#4A2C00', fontFamily: fonts.display, fontSize: 20, letterSpacing: 1, paddingVertical: 4 },
 });
