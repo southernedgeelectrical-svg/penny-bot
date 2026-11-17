@@ -31,6 +31,12 @@
     },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "owner": "hambones-team",
+    "extra": {
+      "eas": {
+        "projectId": "e10d3bc6-f0e4-4b3d-b887-78461ac6c570"
+      }
+    }
   }
 }
