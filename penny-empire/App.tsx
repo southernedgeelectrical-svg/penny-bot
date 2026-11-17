@@ -4,8 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
-import { LilitaOne_400Regular } from '@expo-google-fonts/lilita-one';
-import { Nunito_700Bold, Nunito_900Black } from '@expo-google-fonts/nunito';
+// Import single weights so unused font files aren't bundled into the app.
+import { LilitaOne_400Regular } from '@expo-google-fonts/lilita-one/400Regular';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_900Black } from '@expo-google-fonts/nunito/900Black';
 import { EARNERS, TAP_UPGRADES, UpgradeDef } from './src/game/definitions';
 import {
   bulkCost,

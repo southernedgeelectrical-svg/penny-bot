@@ -1,11 +1,11 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GOLD_BAR_BONUS, PRESTIGE_THRESHOLD } from '../game/definitions';
 import { GameState, goldBarsForRun, prestigeMultiplier } from '../game/economy';
 import { formatMoney, formatNumber } from '../game/format';
 import { colors, fonts, goldGradient } from '../theme';
-import { confirm } from './confirm';
+import { ConfirmDialog, ConfirmRequest } from './ConfirmDialog';
 import { GameButton } from './GameButton';
 import { GoldBar } from './GoldBar';
 import { ProgressBar } from './ProgressBar';
@@ -21,6 +21,7 @@ export function PrestigePanel({ game, onPrestige, onReset }: Props) {
   const prevBarAt = Math.pow(bars, 2) * PRESTIGE_THRESHOLD;
   const nextBarAt = Math.pow(bars + 1, 2) * PRESTIGE_THRESHOLD;
   const newMultiplier = 1 + (game.goldBars + bars) * GOLD_BAR_BONUS;
+  const [confirming, setConfirming] = useState<ConfirmRequest | null>(null);
   const progress = (game.runEarned - (bars > 0 ? prevBarAt : 0)) / (nextBarAt - (bars > 0 ? prevBarAt : 0));
 
   return (
@@ -54,12 +55,12 @@ export function PrestigePanel({ game, onPrestige, onReset }: Props) {
           shimmer={bars > 0}
           disabled={bars <= 0}
           onPress={() =>
-            confirm(
-              'Cash out?',
-              `You'll reset to $0 and lose all upgrades, but gain ${bars} gold bar${bars === 1 ? '' : 's'}.`,
-              'Cash out',
-              onPrestige,
-            )
+            setConfirming({
+              title: 'Cash out?',
+              message: `You'll restart from $0 and lose your upgrades, but gain ${bars} gold bar${bars === 1 ? '' : 's'} for good.`,
+              confirmLabel: 'Cash out',
+              onConfirm: onPrestige,
+            })
           }
           style={{ marginTop: 4 }}
         >
@@ -76,11 +77,21 @@ export function PrestigePanel({ game, onPrestige, onReset }: Props) {
       </Card>
 
       <Pressable
-        onPress={() => confirm('Erase all progress?', 'This deletes everything, including gold bars.', 'Erase', onReset)}
+        onPress={() =>
+          setConfirming({
+            title: 'Erase all progress?',
+            message: 'This deletes everything, including your gold bars. It cannot be undone.',
+            confirmLabel: 'Erase',
+            danger: true,
+            onConfirm: onReset,
+          })
+        }
         style={styles.reset}
       >
         <Text style={styles.resetLabel}>Reset all progress</Text>
       </Pressable>
+
+      <ConfirmDialog request={confirming} onClose={() => setConfirming(null)} />
     </View>
   );
 }

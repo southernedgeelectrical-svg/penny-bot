@@ -5,7 +5,9 @@ import { disabledGradient, goldGradient, greenGradient } from '../theme';
 
 const useNative = Platform.OS !== 'web';
 
-type Variant = 'green' | 'gold';
+type Variant = 'green' | 'gold' | 'red';
+
+const redGradient = ['#FF7A7A', '#D2364F'] as const;
 
 interface Props {
   variant?: Variant;
@@ -36,8 +38,8 @@ export function GameButton({ variant = 'green', disabled, shimmer, onPress, styl
     return () => loop.stop();
   }, [shimmer, disabled, glint]);
 
-  const colors = disabled ? disabledGradient : variant === 'gold' ? goldGradient : greenGradient;
-  const edge = disabled ? '#15282298' : variant === 'gold' ? '#9A6300' : '#0A5C3C';
+  const colors = disabled ? disabledGradient : variant === 'gold' ? goldGradient : variant === 'red' ? redGradient : greenGradient;
+  const edge = disabled ? '#15282298' : variant === 'gold' ? '#9A6300' : variant === 'red' ? '#7A1A2C' : '#0A5C3C';
 
   const animate = (to: number) =>
     Animated.spring(press, { toValue: to, friction: 5, tension: 300, useNativeDriver: useNative }).start();
