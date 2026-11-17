@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const colors = {
   bgTop: '#0E3B2C',
   bg: '#08221A',
@@ -24,10 +26,15 @@ export const goldGradient = ['#FFE680', '#FFC22E', '#E39A0C'] as const;
 export const greenGradient = [colors.greenTop, colors.greenBottom] as const;
 export const disabledGradient = [colors.disabledTop, colors.disabledBottom] as const;
 
+// On web the font name becomes a CSS font-family list, so add rounded/sans fallbacks
+// for browsers or viewers that block the bundled fonts. Native needs the exact name only.
+const webFallback = (name: string) =>
+  Platform.OS === 'web' ? `${name}, "Arial Rounded MT Bold", "Trebuchet MS", system-ui, Roboto, sans-serif` : name;
+
 export const fonts = {
-  display: 'LilitaOne_400Regular',
-  body: 'Nunito_700Bold',
-  bodyHeavy: 'Nunito_900Black',
+  display: webFallback('LilitaOne_400Regular'),
+  body: webFallback('Nunito_700Bold'),
+  bodyHeavy: webFallback('Nunito_900Black'),
 };
 
 /** Badge colors behind each upgrade's icon, by how many stars it has. */

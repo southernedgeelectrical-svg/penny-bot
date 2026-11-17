@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +25,7 @@ import { formatMoney } from './src/game/format';
 import { rankFor } from './src/game/ranks';
 import { useGame } from './src/game/useGame';
 import { Background, Twinkle } from './src/components/Background';
+import { ErrorBoundary } from './src/components/ErrorScreen';
 import { CoinArt } from './src/components/CoinArt';
 import { GameButton } from './src/components/GameButton';
 import { PrestigePanel } from './src/components/PrestigePanel';
@@ -42,13 +43,24 @@ const TABS: { key: Tab; icon: string; label: string }[] = [
   { key: 'prestige', icon: '🥇', label: 'Cash Out' },
 ];
 
+/** Never wait longer than this for custom fonts; the game falls back to system fonts. */
+const FONT_WAIT_MS = 2000;
+
 export default function App() {
-  const [fontsLoaded] = useFonts({ LilitaOne_400Regular, Nunito_700Bold, Nunito_900Black });
+  const [fontsLoaded, fontError] = useFonts({ LilitaOne_400Regular, Nunito_700Bold, Nunito_900Black });
+  const [fontWaitOver, setFontWaitOver] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setFontWaitOver(true), FONT_WAIT_MS);
+    return () => clearTimeout(t);
+  }, []);
+  // Some browsers and embedded viewers block custom fonts; start the game anyway.
+  const ready = fontsLoaded || !!fontError || fontWaitOver;
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
       <Background />
-      {fontsLoaded ? <Game /> : null}
+      <ErrorBoundary>{ready ? <Game /> : null}</ErrorBoundary>
     </SafeAreaProvider>
   );
 }
