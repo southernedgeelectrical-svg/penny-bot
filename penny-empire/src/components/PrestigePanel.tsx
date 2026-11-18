@@ -57,7 +57,7 @@ export function PrestigePanel({ game, onPrestige, onReset }: Props) {
           onPress={() =>
             setConfirming({
               title: 'Cash out?',
-              message: `You'll restart from $0 and lose your upgrades, but gain ${bars} gold bar${bars === 1 ? '' : 's'} for good.`,
+              message: `You'll restart from $0. Upgrades, investments and running deals reset, but you gain ${bars} gold bar${bars === 1 ? '' : 's'} for good. Achievements and your daily streak stay.`,
               confirmLabel: 'Cash out',
               onConfirm: onPrestige,
             })

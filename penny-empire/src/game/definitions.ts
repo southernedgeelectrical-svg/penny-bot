@@ -20,6 +20,8 @@ export const TAP_UPGRADES: UpgradeDef[] = [
   { id: 'ring', kind: 'tap', name: 'Diamond Ring', emoji: '💍', description: '+60 per tap', baseCost: 6_000, costGrowth: 1.17, baseOutput: 60 },
   { id: 'scepter', kind: 'tap', name: 'Royal Scepter', emoji: '🪄', description: '+450 per tap', baseCost: 150_000, costGrowth: 1.18, baseOutput: 450 },
   { id: 'midas', kind: 'tap', name: 'Midas Touch', emoji: '✨', description: '+4,000 per tap', baseCost: 4_000_000, costGrowth: 1.19, baseOutput: 4_000 },
+  { id: 'crown', kind: 'tap', name: 'Golden Crown', emoji: '👑', description: '+35,000 per tap', baseCost: 120_000_000, costGrowth: 1.2, baseOutput: 35_000 },
+  { id: 'forge', kind: 'tap', name: 'Star Forge', emoji: '🌟', description: '+400,000 per tap', baseCost: 5_000_000_000, costGrowth: 1.21, baseOutput: 400_000 },
 ];
 
 export const EARNERS: UpgradeDef[] = [
@@ -32,6 +34,9 @@ export const EARNERS: UpgradeDef[] = [
   { id: 'bank', kind: 'earner', name: 'Private Bank', emoji: '🏦', description: '55,000 / sec', baseCost: 90_000_000, costGrowth: 1.12, baseOutput: 55_000 },
   { id: 'oil', kind: 'earner', name: 'Oil Empire', emoji: '🛢️', description: '420,000 / sec', baseCost: 1_500_000_000, costGrowth: 1.12, baseOutput: 420_000 },
   { id: 'space', kind: 'earner', name: 'Asteroid Mining', emoji: '🚀', description: '3.5M / sec', baseCost: 30_000_000_000, costGrowth: 1.11, baseOutput: 3_500_000 },
+  { id: 'resort', kind: 'earner', name: 'Moon Resort', emoji: '🌙', description: '28M / sec', baseCost: 600_000_000_000, costGrowth: 1.11, baseOutput: 28_000_000 },
+  { id: 'mars', kind: 'earner', name: 'Mars Colony', emoji: '🪐', description: '230M / sec', baseCost: 12_000_000_000_000, costGrowth: 1.1, baseOutput: 230_000_000 },
+  { id: 'galactic', kind: 'earner', name: 'Galactic Bank', emoji: '🌌', description: '2B / sec', baseCost: 250_000_000_000_000, costGrowth: 1.1, baseOutput: 2_000_000_000 },
 ];
 
 export const ALL_UPGRADES: UpgradeDef[] = [...TAP_UPGRADES, ...EARNERS];
@@ -57,3 +62,9 @@ export const GOLD_BAR_BONUS = 0.1;
 /** Offline earnings are capped at this many seconds and paid at this rate. */
 export const OFFLINE_CAP_SECONDS = 3 * 60 * 60;
 export const OFFLINE_RATE = 0.5;
+
+/** Each claimed achievement adds this much to all income, permanently (0.02 = +2%). */
+export const ACHIEVEMENT_BONUS = 0.02;
+
+/** The Invest tab opens once you've earned this much in total. */
+export const INVEST_UNLOCK = 2_500;

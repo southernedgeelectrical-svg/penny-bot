@@ -16,16 +16,26 @@ import {
   levelOf,
   maxAffordable,
   perSecond,
+  incomeMultiplier,
   perTap,
-  prestigeMultiplier,
   tierOf,
   upgradeOutput,
 } from './src/game/economy';
+import { unclaimedCount } from './src/game/achievements';
+import { dailyStatus } from './src/game/daily';
+import { readyDeals } from './src/game/deals';
 import { formatMoney } from './src/game/format';
 import { rankFor } from './src/game/ranks';
 import { useGame } from './src/game/useGame';
 import { Background, Twinkle } from './src/components/Background';
+import { Badge } from './src/components/Badge';
+import { DailyModal } from './src/components/DailyModal';
 import { ErrorBoundary } from './src/components/ErrorScreen';
+import { GoalsPanel } from './src/components/GoalsPanel';
+import { InvestPanel } from './src/components/InvestPanel';
+import { SmoothMoney } from './src/components/SmoothMoney';
+import { Toasts } from './src/components/Toasts';
+import { Tutorial } from './src/components/Tutorial';
 import { CoinArt } from './src/components/CoinArt';
 import { GameButton } from './src/components/GameButton';
 import { PrestigePanel } from './src/components/PrestigePanel';
@@ -34,12 +44,14 @@ import { TapCoin } from './src/components/TapCoin';
 import { UpgradeCard } from './src/components/UpgradeCard';
 import { colors, fonts, goldGradient, greenGradient } from './src/theme';
 
-type Tab = 'tap' | 'business' | 'prestige';
+type Tab = 'tap' | 'business' | 'invest' | 'goals' | 'prestige';
 type BuyMode = 1 | 10 | 'max';
 
 const TABS: { key: Tab; icon: string; label: string }[] = [
-  { key: 'tap', icon: '👆', label: 'Tap Power' },
-  { key: 'business', icon: '🏢', label: 'Businesses' },
+  { key: 'tap', icon: '👆', label: 'Tap' },
+  { key: 'business', icon: '🏢', label: 'Business' },
+  { key: 'invest', icon: '📈', label: 'Invest' },
+  { key: 'goals', icon: '🏆', label: 'Goals' },
   { key: 'prestige', icon: '🥇', label: 'Cash Out' },
 ];
 
@@ -66,9 +78,12 @@ export default function App() {
 }
 
 function Game() {
-  const { game, loaded, offlineEarned, tap, buy, enhance, prestige, reset, dismissOffline } = useGame();
+  const g = useGame();
+  const { game, loaded, offlineEarned, tap, buy, enhance, prestige, reset, dismissOffline } = g;
   const [tab, setTab] = useState<Tab>('tap');
   const [buyMode, setBuyMode] = useState<BuyMode>(1);
+  const [showHelp, setShowHelp] = useState(false);
+  const [dailyLater, setDailyLater] = useState(false);
 
   const onBuy = useCallback((id: string) => buy(id, buyMode), [buy, buyMode]);
   const { width, height } = useWindowDimensions();
@@ -77,23 +92,51 @@ function Game() {
 
   const { rank, next, progress } = rankFor(game.runEarned);
   const tapValue = perTap(game);
+  const multiplier = incomeMultiplier(game);
+  const now = game.lastActive;
+  const daily = dailyStatus(game, now);
+
+  const badges: Record<Tab, number> = {
+    tap: actionableCount(game, TAP_UPGRADES),
+    business: actionableCount(game, EARNERS),
+    invest: readyDeals(game, now),
+    goals: unclaimedCount(game) + (daily.available ? 1 : 0),
+    prestige: 0,
+  };
+
+  // One popup at a time: tutorial, then "welcome back", then the daily bonus.
+  const tutorialOpen = !game.tutorialSeen || showHelp;
+  const dailyOpen = daily.available && !dailyLater && !tutorialOpen && offlineEarned === null;
 
   // Tablets and landscape screens: coin on the left, shop on the right.
   const wide = width >= 700 && width > height;
+  // On phones, shrink the coin on list-heavy tabs so there's room to read (it still works).
+  const compact = !wide && (tab === 'invest' || tab === 'goals' || tab === 'prestige');
   const coinSize = Math.round(
-    wide ? Math.min(300, height * 0.4, width * 0.24) : Math.min(width >= 600 ? 260 : 180, height * 0.24),
+    wide
+      ? Math.min(300, height * 0.4, width * 0.24)
+      : compact
+        ? Math.min(width >= 600 ? 150 : 104, height * 0.14)
+        : Math.min(width >= 600 ? 260 : 180, height * 0.24),
   );
 
   const coinArea = (
     <>
       <View style={styles.header}>
-        <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit>
-          {formatMoney(Math.floor(game.balance))}
-        </Text>
+        <Pressable
+          onPress={() => setShowHelp(true)}
+          style={styles.help}
+          accessibilityRole="button"
+          accessibilityLabel="How to play"
+          hitSlop={8}
+        >
+          <Text style={styles.helpText}>?</Text>
+        </Pressable>
+        <SmoothMoney value={game.balance} style={styles.balance} />
         <View style={styles.chips}>
           <Chip icon="👆" text={`${formatMoney(tapValue)}/tap`} />
           <Chip icon="⏱️" text={`${formatMoney(perSecond(game))}/sec`} />
-          {game.goldBars > 0 && <Chip icon="🥇" text={`×${prestigeMultiplier(game).toFixed(1)}`} />}
+          {multiplier > 1.0001 && <Chip icon="✨" text={`×${multiplier.toFixed(2)}`} />}
         </View>
       </View>
 
@@ -105,7 +148,7 @@ function Game() {
           <Text style={styles.rankName}>{rank.name}</Text>
           <Twinkle size={12} />
         </View>
-        {next && (
+        {next && !compact && (
           <>
             <ProgressBar progress={progress} colors={goldGradient} height={6} />
             <Text style={styles.rankNext}>Earn {formatMoney(next.minEarned)} this run to unlock the {next.name}</Text>
@@ -124,13 +167,16 @@ function Game() {
             <Pressable key={t.key} onPress={() => setTab(t.key)} style={styles.tab}>
               {active && <LinearGradient colors={greenGradient} style={[StyleSheet.absoluteFill, styles.tabActive]} />}
               <Text style={styles.tabIcon}>{t.icon}</Text>
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
+              <Text style={[styles.tabLabel, active && styles.tabLabelActive]} numberOfLines={1}>
+                {t.label}
+              </Text>
+              <Badge count={badges[t.key]} />
             </Pressable>
           );
         })}
       </View>
 
-      {tab !== 'prestige' && (
+      {(tab === 'tap' || tab === 'business') && (
         <View style={styles.buyModes}>
           <Text style={styles.buyModesLabel}>BUY</Text>
           {([1, 10, 'max'] as BuyMode[]).map((m) => {
@@ -144,9 +190,20 @@ function Game() {
         </View>
       )}
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+      {/* Keyed by tab so each tab opens scrolled to the top. */}
+      <ScrollView key={tab} style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {tab === 'prestige' ? (
           <PrestigePanel game={game} onPrestige={prestige} onReset={reset} />
+        ) : tab === 'invest' ? (
+          <InvestPanel
+            game={game}
+            onStartDeal={g.startDeal}
+            onCollectDeal={g.collectDeal}
+            onBuyAsset={g.buyAsset}
+            onSellAsset={g.sellAsset}
+          />
+        ) : tab === 'goals' ? (
+          <GoalsPanel game={game} onClaimDaily={g.claimDaily} onClaimAchievement={g.claimAchievement} />
         ) : (
           visibleUpgrades(game, tab === 'tap' ? TAP_UPGRADES : EARNERS).map((def) => (
             <UpgradeRow key={def.id} def={def} game={game} buyMode={buyMode} onBuy={onBuy} onEnhance={enhance} />
@@ -185,6 +242,23 @@ function Game() {
           </LinearGradient>
         </View>
       </Modal>
+
+      <DailyModal
+        status={daily}
+        visible={dailyOpen}
+        onClaim={g.claimDaily}
+        onLater={() => setDailyLater(true)}
+      />
+
+      <Tutorial
+        visible={tutorialOpen}
+        onDone={() => {
+          setShowHelp(false);
+          if (!game.tutorialSeen) g.tutorialDone();
+        }}
+      />
+
+      <Toasts toasts={g.toasts} onDismiss={g.dismissToast} top={8} />
     </SafeAreaView>
   );
 }
@@ -196,6 +270,15 @@ function Chip({ icon, text }: { icon: string; text: string }) {
       <Text style={styles.chipText}>{text}</Text>
     </View>
   );
+}
+
+/** How many upgrades in this list you can buy or star right now (for the tab badge). */
+function actionableCount(game: GameState, defs: UpgradeDef[]): number {
+  return visibleUpgrades(game, defs).filter((d) => {
+    const level = levelOf(game, d.id);
+    const st = enhanceStatus(game, d);
+    return bulkCost(d, level, 1) <= game.balance || (st.kind === 'available' && st.affordable);
+  }).length;
 }
 
 /** Show owned upgrades plus the next one or two you're working toward, so the list unfolds as you grow. */
@@ -230,7 +313,7 @@ function UpgradeRow({
       def={def}
       level={level}
       tier={tierOf(game, def.id)}
-      output={upgradeOutput(game, def) * prestigeMultiplier(game)}
+      output={upgradeOutput(game, def) * incomeMultiplier(game)}
       buyCount={shownCount}
       buyCost={cost}
       canBuy={count > 0 && cost <= game.balance}
@@ -248,6 +331,21 @@ const styles = StyleSheet.create({
   widePlay: { flex: 1, justifyContent: 'center' },
   wideShop: { flex: 1.15, maxWidth: 680, paddingTop: 12 },
   header: { alignItems: 'center', paddingTop: 8, paddingHorizontal: 16 },
+  help: {
+    position: 'absolute',
+    right: 16,
+    top: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,211,77,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  helpText: { color: colors.gold, fontFamily: fonts.display, fontSize: 18 },
   balance: {
     color: colors.gold,
     fontFamily: fonts.display,
@@ -284,10 +382,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.05)',
   },
-  tab: { flex: 1, paddingVertical: 7, borderRadius: 12, alignItems: 'center', overflow: 'hidden' },
+  tab: { flex: 1, paddingVertical: 7, paddingHorizontal: 2, borderRadius: 12, alignItems: 'center', overflow: 'hidden' },
   tabActive: { borderRadius: 12 },
   tabIcon: { fontSize: 16 },
-  tabLabel: { color: colors.muted, fontSize: 12, fontFamily: fonts.bodyHeavy },
+  tabLabel: { color: colors.muted, fontSize: 11, fontFamily: fonts.bodyHeavy },
   tabLabelActive: { color: colors.text },
   buyModes: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginTop: 10 },
   buyModesLabel: { color: colors.muted, fontFamily: fonts.display, fontSize: 13, marginRight: 4, letterSpacing: 1 },

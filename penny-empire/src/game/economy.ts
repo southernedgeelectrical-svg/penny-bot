@@ -1,5 +1,6 @@
+/** Core rules: costs, income, tapping, buying, stars. Newer systems live in market/deals/daily/achievements. */
 import {
-  ALL_UPGRADES,
+  ACHIEVEMENT_BONUS,
   EARNERS,
   GOLD_BAR_BONUS,
   OFFLINE_CAP_SECONDS,
@@ -12,39 +13,9 @@ import {
   UPGRADE_BY_ID,
   UpgradeDef,
 } from './definitions';
+import { GameState } from './types';
 
-export const SAVE_VERSION = 1;
-
-export interface GameState {
-  version: number;
-  balance: number;
-  /** Earned since the last prestige; drives gold bar rewards. */
-  runEarned: number;
-  /** Earned across every run, for stats. */
-  allTimeEarned: number;
-  totalTaps: number;
-  levels: Record<string, number>;
-  tiers: Record<string, number>;
-  goldBars: number;
-  prestigeCount: number;
-  /** Epoch ms of the last tick, used to compute offline earnings. */
-  lastActive: number;
-}
-
-export function newGame(now = Date.now()): GameState {
-  return {
-    version: SAVE_VERSION,
-    balance: 0,
-    runEarned: 0,
-    allTimeEarned: 0,
-    totalTaps: 0,
-    levels: {},
-    tiers: {},
-    goldBars: 0,
-    prestigeCount: 0,
-    lastActive: now,
-  };
-}
+export type { GameState } from './types';
 
 export const levelOf = (s: GameState, id: string) => s.levels[id] ?? 0;
 export const tierOf = (s: GameState, id: string) => s.tiers[id] ?? 0;
@@ -111,18 +82,27 @@ export function prestigeMultiplier(s: GameState): number {
   return 1 + s.goldBars * GOLD_BAR_BONUS;
 }
 
-/** Output of one upgrade at its current level and tier, before prestige. */
+export function achievementMultiplier(s: GameState): number {
+  return 1 + s.claimed.length * ACHIEVEMENT_BONUS;
+}
+
+/** Everything that boosts all income: gold bars and claimed achievements. */
+export function incomeMultiplier(s: GameState): number {
+  return prestigeMultiplier(s) * achievementMultiplier(s);
+}
+
+/** Output of one upgrade at its current level and tier, before multipliers. */
 export function upgradeOutput(s: GameState, def: UpgradeDef): number {
   return levelOf(s, def.id) * def.baseOutput * tierMultiplier(tierOf(s, def.id));
 }
 
 export function perTap(s: GameState): number {
   const base = 1 + TAP_UPGRADES.reduce((sum, d) => sum + upgradeOutput(s, d), 0);
-  return base * prestigeMultiplier(s);
+  return base * incomeMultiplier(s);
 }
 
 export function perSecond(s: GameState): number {
-  return EARNERS.reduce((sum, d) => sum + upgradeOutput(s, d), 0) * prestigeMultiplier(s);
+  return EARNERS.reduce((sum, d) => sum + upgradeOutput(s, d), 0) * incomeMultiplier(s);
 }
 
 // ---------- Prestige ----------
@@ -135,12 +115,15 @@ export function goldBarsForRun(runEarned: number): number {
 
 // ---------- Actions ----------
 
-function earn(s: GameState, amount: number): GameState {
+/** Add money that counts as earnings (affects gold bars, rank and stats). */
+export function earn(s: GameState, amount: number): GameState {
+  const runEarned = s.runEarned + amount;
   return {
     ...s,
     balance: s.balance + amount,
-    runEarned: s.runEarned + amount,
+    runEarned,
     allTimeEarned: s.allTimeEarned + amount,
+    stats: runEarned > s.stats.bestRunEarned ? { ...s.stats, bestRunEarned: runEarned } : s.stats,
   };
 }
 
@@ -148,7 +131,8 @@ export function tap(s: GameState): GameState {
   return { ...earn(s, perTap(s)), totalTaps: s.totalTaps + 1 };
 }
 
-export function tick(s: GameState, now: number): GameState {
+/** Passive income for the time since the last tick. */
+export function collectIncome(s: GameState, now: number): GameState {
   const dt = Math.max(0, (now - s.lastActive) / 1000);
   return { ...earn(s, perSecond(s) * dt), lastActive: now };
 }
@@ -174,55 +158,12 @@ export function enhance(s: GameState, id: string): GameState {
     ...s,
     balance: s.balance - status.cost,
     tiers: { ...s.tiers, [id]: tierOf(s, id) + 1 },
+    stats: { ...s.stats, starsBought: s.stats.starsBought + 1 },
   };
 }
 
-export function prestige(s: GameState, now = Date.now()): GameState {
-  const bars = goldBarsForRun(s.runEarned);
-  if (bars <= 0) return s;
-  return {
-    ...newGame(now),
-    allTimeEarned: s.allTimeEarned,
-    totalTaps: s.totalTaps,
-    goldBars: s.goldBars + bars,
-    prestigeCount: s.prestigeCount + 1,
-  };
-}
-
-/** Apply earnings for time spent away. Returns the new state and the amount paid. */
-export function applyOffline(s: GameState, now: number): { state: GameState; earned: number } {
+/** Passive income for time away (half rate, capped). */
+export function offlineIncome(s: GameState, now: number): number {
   const away = Math.min(OFFLINE_CAP_SECONDS, Math.max(0, (now - s.lastActive) / 1000));
-  const earned = perSecond(s) * away * OFFLINE_RATE;
-  return { state: { ...earn(s, earned), lastActive: now }, earned };
+  return perSecond(s) * away * OFFLINE_RATE;
 }
-
-/** Accept a parsed save, filling any missing fields so older saves keep working. */
-export function migrate(raw: unknown, now = Date.now()): GameState {
-  const fresh = newGame(now);
-  if (!raw || typeof raw !== 'object') return fresh;
-  const r = raw as Partial<GameState>;
-  const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-  const record = (v: unknown) => {
-    const out: Record<string, number> = {};
-    if (v && typeof v === 'object') {
-      for (const [k, val] of Object.entries(v)) {
-        if (UPGRADE_BY_ID[k] && typeof val === 'number' && val >= 0) out[k] = Math.floor(val);
-      }
-    }
-    return out;
-  };
-  return {
-    version: SAVE_VERSION,
-    balance: num(r.balance, 0),
-    runEarned: num(r.runEarned, 0),
-    allTimeEarned: num(r.allTimeEarned, 0),
-    totalTaps: num(r.totalTaps, 0),
-    levels: record(r.levels),
-    tiers: record(r.tiers),
-    goldBars: num(r.goldBars, 0),
-    prestigeCount: num(r.prestigeCount, 0),
-    lastActive: num(r.lastActive, now),
-  };
-}
-
-export { ALL_UPGRADES };

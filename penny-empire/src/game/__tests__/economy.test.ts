@@ -1,7 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { EARNERS, PRESTIGE_THRESHOLD, TAP_UPGRADES, UPGRADE_BY_ID } from '../definitions';
 import {
-  applyOffline,
   buy,
   bulkCost,
   enhance,
@@ -10,16 +9,17 @@ import {
   goldBarsForRun,
   levelCost,
   maxAffordable,
-  migrate,
-  newGame,
   perSecond,
   perTap,
-  prestige,
   tap,
-  tick,
 } from '../economy';
+import { applyOffline as applyOfflineSeeded, migrate, newGame, prestige, tick as tickSeeded } from '../game';
+
 import { formatMoney, formatNumber } from '../format';
 import { rankFor } from '../ranks';
+
+const tick = (s: GameState, now: number) => tickSeeded(s, now, 42);
+const applyOffline = (s: GameState, now: number) => applyOfflineSeeded(s, now, 42);
 
 const T0 = 1_700_000_000_000;
 const withBalance = (balance: number, extra: Partial<GameState> = {}): GameState => ({

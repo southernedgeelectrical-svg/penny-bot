@@ -11,14 +11,19 @@ You start with **$0**. Tap the coin to earn cash, buy upgrades, and grow an empi
 | Feature | What it does |
 | --- | --- |
 | **Tapping** | Each tap earns your "per tap" amount. Starts at $1. |
-| **Tap Power upgrades** | 5 upgrades (Quick Fingers → Midas Touch) that add to every tap. |
-| **Businesses** | 9 businesses (Lemonade Stand → Asteroid Mining) that earn money every second, even when you aren't tapping. |
+| **Tap Power upgrades** | 7 upgrades (Quick Fingers → Star Forge) that add to every tap. |
+| **Businesses** | 12 businesses (Lemonade Stand → Galactic Bank) that earn money every second, even when you aren't tapping. |
 | **Enhancing upgrades** | Upgrades can be upgraded too. At levels 10, 25, 50, 100, 150… an upgrade unlocks a ★ Enhance that **doubles its output**. Up to 11 stars per upgrade. |
 | **Buy ×1 / ×10 / MAX** | Buy levels in bulk. |
-| **Cash Out (prestige)** | After earning $1M in a run, sell everything for **gold bars**. You restart from $0, but every gold bar permanently adds +10% to all income. |
-| **Offline earnings** | Businesses keep earning at 50% speed while the app is closed (up to 3 hours). |
-| **Coin ranks** | Your coin changes metal as you earn: Copper Penny → Silver Dollar → Gold Coin → Platinum → Diamond. Cashing out starts you back at a penny. |
-| **Autosave** | Progress saves to the device every 5 seconds and when the app is closed. |
+| **Invest → Deals** | Timed ventures (Garage Sale Flip → Treasure Expedition). Pay up front, wait 1–20 minutes, then collect. Safe deals pay ×1.3; long shots pay up to ×10 but can fall through (you get 30% back). Three offers at a time, refreshed every 10 minutes. Unlocks after $2,500 earned. |
+| **Invest → Markets** | Savings Bonds, Property Fund, Blue-Chip Stocks and Crypto Coin, with live prices and 10-minute charts. Riskier assets grow faster on average but swing harder. Buy 10% / 50% of your cash, sell everything at once. |
+| **Goals → Achievements** | 22 goals (taps, earnings, stars, deals, trades…). Claim each one for **+2% income forever**. |
+| **Goals → Daily bonus** | Claim once a day. Rewards grow over a 7-day streak, with a jackpot on day 7. Missing a day restarts the streak. |
+| **Cash Out (prestige)** | After earning $1M in a run, sell everything for **gold bars**. You restart from $0, but every gold bar permanently adds +10% to all income. Achievements and your streak carry over. |
+| **Coin ranks** | Your coin changes metal as you earn: Copper Penny → Silver Dollar → Gold Coin → Platinum → Diamond. |
+| **Offline earnings** | Businesses keep earning at 50% speed while the app is closed (up to 3 hours). Markets and deals keep running too. |
+| **Smooth feel** | The balance counts up smoothly, red badges show which tabs have something to buy or claim, and a 5-step "How to play" guide opens for new players (tap **?** to see it again). |
+| **Autosave** | Progress saves to the device every 5 seconds and when the app is closed. Saves from older versions upgrade automatically. |
 
 All tuning numbers (prices, outputs, star levels, prestige rate) live in
 [`src/game/definitions.ts`](src/game/definitions.ts). Change them there to rebalance the game.
@@ -37,12 +42,17 @@ All tuning numbers (prices, outputs, star levels, prestige rate) live in
 ```
 App.tsx                      Main screen: balance, coin, tabs, lists
 src/game/definitions.ts      Every upgrade, business, and balancing constant
-src/game/economy.ts          Game rules (pure functions, no UI)
+src/game/economy.ts          Core rules: costs, income, tapping, buying, stars
+src/game/market.ts           Markets: assets, price simulation, buy/sell
+src/game/deals.ts            Deals: offers, timed ventures, payouts
+src/game/achievements.ts     Achievement list and claiming
+src/game/daily.ts            Daily login bonus and streak
+src/game/game.ts             Ties it together: ticks, offline time, cash out, loading old saves
 src/game/useGame.ts          React state, game loop, autosave, offline earnings
 src/game/storage.ts          Saving/loading on the device
 src/game/format.ts           $1.23K / $4.56M number formatting
 src/game/ranks.ts            Coin metal ranks
-src/components/              Coin art, tap effects, buttons, upgrade card, cash-out panel
+src/components/              Coin art, tap effects, buttons, cards, Invest/Goals/Cash Out screens, popups
 src/theme.ts                 Colors, gradients, fonts
 src/game/__tests__/          Unit tests for the game rules
 ```

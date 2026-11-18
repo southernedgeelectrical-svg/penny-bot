@@ -22,3 +22,22 @@ export function formatNumber(n: number): string {
 }
 
 export const formatMoney = (n: number) => '$' + formatNumber(n);
+
+/** 75 → "1:15", 3600 → "60:00". For countdowns. */
+export function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** 60 → "1 min", 1200 → "20 min", 45 → "45 sec". For deal lengths. */
+export function formatDuration(seconds: number): string {
+  return seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds)} sec`;
+}
+
+/** 0.0512 → "+5.1%", -0.2 → "-20.0%". */
+export function formatPercent(fraction: number): string {
+  const pct = fraction * 100;
+  const text = pct.toFixed(1);
+  if (text === '0.0' || text === '-0.0') return '0.0%';
+  return `${pct > 0 ? '+' : ''}${text}%`;
+}

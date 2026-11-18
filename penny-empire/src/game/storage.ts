@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GameState, migrate } from './economy';
+import { migrate } from './game';
+import { GameState } from './types';
 
 const KEY = 'penny-empire/save';
 
