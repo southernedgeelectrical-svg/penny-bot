@@ -8,9 +8,14 @@ import { useFonts } from 'expo-font';
 import { LilitaOne_400Regular } from '@expo-google-fonts/lilita-one/400Regular';
 import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
 import { Nunito_900Black } from '@expo-google-fonts/nunito/900Black';
-import { EARNERS, TAP_UPGRADES, UpgradeDef } from './src/game/definitions';
+import { AUTO_CLICKERS, EARNERS, TAP_UPGRADES, UpgradeDef } from './src/game/definitions';
 import {
+  autoClicksPerSec,
+  autoIncomePerSec,
   bulkCost,
+  clickSpeedMultiplier,
+  comboMaxMultiplier,
+  comboMultiplier,
   enhanceStatus,
   GameState,
   levelOf,
@@ -18,13 +23,14 @@ import {
   perSecond,
   incomeMultiplier,
   perTap,
+  tapValue as currentTapValue,
   tierOf,
   upgradeOutput,
 } from './src/game/economy';
 import { unclaimedCount } from './src/game/achievements';
 import { dailyStatus } from './src/game/daily';
 import { readyDeals } from './src/game/deals';
-import { formatMoney } from './src/game/format';
+import { formatMoney, formatNumber } from './src/game/format';
 import { rankFor } from './src/game/ranks';
 import { useGame } from './src/game/useGame';
 import { Background, Twinkle } from './src/components/Background';
@@ -37,6 +43,7 @@ import { SmoothMoney } from './src/components/SmoothMoney';
 import { Toasts } from './src/components/Toasts';
 import { Tutorial } from './src/components/Tutorial';
 import { CoinArt } from './src/components/CoinArt';
+import { ComboMeter } from './src/components/ComboMeter';
 import { GameButton } from './src/components/GameButton';
 import { PrestigePanel } from './src/components/PrestigePanel';
 import { ProgressBar } from './src/components/ProgressBar';
@@ -92,12 +99,14 @@ function Game() {
 
   const { rank, next, progress } = rankFor(game.runEarned);
   const tapValue = perTap(game);
+  const liveTapValue = currentTapValue(game);
+  const autoCps = autoClicksPerSec(game);
   const multiplier = incomeMultiplier(game);
   const now = game.lastActive;
   const daily = dailyStatus(game, now);
 
   const badges: Record<Tab, number> = {
-    tap: actionableCount(game, TAP_UPGRADES),
+    tap: actionableCount(game, TAP_UPGRADES) + actionableCount(game, AUTO_CLICKERS),
     business: actionableCount(game, EARNERS),
     invest: readyDeals(game, now),
     goals: unclaimedCount(game) + (daily.available ? 1 : 0),
@@ -135,12 +144,15 @@ function Game() {
         <SmoothMoney value={game.balance} style={styles.balance} />
         <View style={styles.chips}>
           <Chip icon="👆" text={`${formatMoney(tapValue)}/tap`} />
-          <Chip icon="⏱️" text={`${formatMoney(perSecond(game))}/sec`} />
+          <Chip icon="⏱️" text={`${formatMoney(perSecond(game) + autoIncomePerSec(game))}/sec`} />
+          {autoCps > 0 && <Chip icon="🤖" text={`${formatNumber(autoCps)} clicks/s`} />}
           {multiplier > 1.0001 && <Chip icon="✨" text={`×${multiplier.toFixed(2)}`} />}
         </View>
       </View>
 
-      <TapCoin perTap={tapValue} rank={rank.id} onTap={tap} size={coinSize} />
+      <TapCoin tapValue={liveTapValue} autoClicksPerSec={autoCps} rank={rank.id} onTap={tap} size={coinSize} />
+
+      <ComboMeter level={game.combo} multiplier={comboMultiplier(game)} max={comboMaxMultiplier(game)} />
 
       <View style={styles.rank}>
         <View style={styles.rankRow}>
@@ -205,9 +217,26 @@ function Game() {
         ) : tab === 'goals' ? (
           <GoalsPanel game={game} onClaimDaily={g.claimDaily} onClaimAchievement={g.claimAchievement} />
         ) : (
-          visibleUpgrades(game, tab === 'tap' ? TAP_UPGRADES : EARNERS).map((def) => (
-            <UpgradeRow key={def.id} def={def} game={game} buyMode={buyMode} onBuy={onBuy} onEnhance={enhance} />
-          ))
+          <>
+            {visibleUpgrades(game, tab === 'tap' ? TAP_UPGRADES : EARNERS).map((def) => (
+              <UpgradeRow key={def.id} def={def} game={game} buyMode={buyMode} onBuy={onBuy} onEnhance={enhance} />
+            ))}
+            {tab === 'tap' && (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>🤖 Auto Clickers</Text>
+                  <Text style={styles.sectionHint}>
+                    {clickSpeedMultiplier(game) > 1
+                      ? `Robots tap the coin for you. Your ${rank.name} makes them click ${clickSpeedMultiplier(game)}× faster.`
+                      : 'Robots tap the coin for you. Upgrade your coin to make them faster: ×1.5 at Silver, up to ×5 at Diamond.'}
+                  </Text>
+                </View>
+                {visibleUpgrades(game, AUTO_CLICKERS).map((def) => (
+                  <UpgradeRow key={def.id} def={def} game={game} buyMode={buyMode} onBuy={onBuy} onEnhance={enhance} />
+                ))}
+              </>
+            )}
+          </>
         )}
       </ScrollView>
     </>
@@ -313,7 +342,7 @@ function UpgradeRow({
       def={def}
       level={level}
       tier={tierOf(game, def.id)}
-      output={upgradeOutput(game, def) * incomeMultiplier(game)}
+      output={upgradeOutput(game, def) * (def.kind === 'auto' ? clickSpeedMultiplier(game) : incomeMultiplier(game))}
       buyCount={shownCount}
       buyCost={cost}
       canBuy={count > 0 && cost <= game.balance}
@@ -346,6 +375,9 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   helpText: { color: colors.gold, fontFamily: fonts.display, fontSize: 18 },
+  sectionHeader: { gap: 2, marginTop: 6, marginBottom: 10 },
+  sectionTitle: { color: colors.goldLight, fontFamily: fonts.display, fontSize: 20 },
+  sectionHint: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
   balance: {
     color: colors.gold,
     fontFamily: fonts.display,

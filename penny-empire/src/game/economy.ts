@@ -1,11 +1,17 @@
 /** Core rules: costs, income, tapping, buying, stars. Newer systems live in market/deals/daily/achievements. */
 import {
   ACHIEVEMENT_BONUS,
+  AUTO_CLICKERS,
+  COMBO_DECAY_PER_SEC,
+  COMBO_MAX_BASE,
+  COMBO_MAX_PER_RANK,
+  COMBO_PER_TAP,
   EARNERS,
   GOLD_BAR_BONUS,
   OFFLINE_CAP_SECONDS,
   OFFLINE_RATE,
   PRESTIGE_THRESHOLD,
+  RANK_CLICK_SPEED,
   TAP_UPGRADES,
   TIER_COST_FACTOR,
   TIER_LEVEL_REQUIREMENTS,
@@ -13,6 +19,7 @@ import {
   UPGRADE_BY_ID,
   UpgradeDef,
 } from './definitions';
+import { RANKS, rankFor } from './ranks';
 import { GameState } from './types';
 
 export type { GameState } from './types';
@@ -105,6 +112,42 @@ export function perSecond(s: GameState): number {
   return EARNERS.reduce((sum, d) => sum + upgradeOutput(s, d), 0) * incomeMultiplier(s);
 }
 
+// ---------- Auto clickers & combo ----------
+
+function rankIndex(s: GameState): number {
+  return RANKS.indexOf(rankFor(s.runEarned).rank);
+}
+
+/** How much faster auto clickers run at your current coin rank. */
+export function clickSpeedMultiplier(s: GameState): number {
+  return RANK_CLICK_SPEED[rankIndex(s)] ?? 1;
+}
+
+/** Auto clicks per second from all robots, including stars and coin rank speed. */
+export function autoClicksPerSec(s: GameState): number {
+  return AUTO_CLICKERS.reduce((sum, d) => sum + upgradeOutput(s, d), 0) * clickSpeedMultiplier(s);
+}
+
+/** Biggest combo multiplier available at your coin rank (×2 at copper, up to ×4 at diamond). */
+export function comboMaxMultiplier(s: GameState): number {
+  return COMBO_MAX_BASE + COMBO_MAX_PER_RANK * rankIndex(s);
+}
+
+/** Current combo multiplier on tap value (1 when the meter is empty). */
+export function comboMultiplier(s: GameState): number {
+  return 1 + s.combo * (comboMaxMultiplier(s) - 1);
+}
+
+/** What one tap is worth right now, including the combo. */
+export function tapValue(s: GameState): number {
+  return perTap(s) * comboMultiplier(s);
+}
+
+/** Money per second from auto clickers right now. */
+export function autoIncomePerSec(s: GameState): number {
+  return tapValue(s) * autoClicksPerSec(s);
+}
+
 // ---------- Prestige ----------
 
 /** Gold bars you'd receive for cashing out now. */
@@ -127,14 +170,29 @@ export function earn(s: GameState, amount: number): GameState {
   };
 }
 
+/** A manual tap: earns the tap value (with combo) and fills the combo meter. */
 export function tap(s: GameState): GameState {
-  return { ...earn(s, perTap(s)), totalTaps: s.totalTaps + 1 };
+  const combo = Math.min(1, s.combo + COMBO_PER_TAP);
+  const next = earn(s, tapValue(s));
+  return {
+    ...next,
+    totalTaps: s.totalTaps + 1,
+    combo,
+    stats: combo > next.stats.maxCombo ? { ...next.stats, maxCombo: combo } : next.stats,
+  };
 }
 
-/** Passive income for the time since the last tick. */
+/** Passive income (businesses + auto clickers) for the time since the last tick; the combo cools down. */
 export function collectIncome(s: GameState, now: number): GameState {
   const dt = Math.max(0, (now - s.lastActive) / 1000);
-  return { ...earn(s, perSecond(s) * dt), lastActive: now };
+  const clicks = autoClicksPerSec(s) * dt;
+  const next = earn(s, (perSecond(s) + autoIncomePerSec(s)) * dt);
+  return {
+    ...next,
+    lastActive: now,
+    combo: Math.max(0, s.combo - COMBO_DECAY_PER_SEC * dt),
+    stats: clicks > 0 ? { ...next.stats, autoClicks: next.stats.autoClicks + clicks } : next.stats,
+  };
 }
 
 /** Buy up to `count` levels (or as many as affordable when count is 'max'). */
@@ -165,5 +223,6 @@ export function enhance(s: GameState, id: string): GameState {
 /** Passive income for time away (half rate, capped). */
 export function offlineIncome(s: GameState, now: number): number {
   const away = Math.min(OFFLINE_CAP_SECONDS, Math.max(0, (now - s.lastActive) / 1000));
-  return perSecond(s) * away * OFFLINE_RATE;
+  // Robots keep clicking while you're away, but without your combo.
+  return (perSecond(s) + perTap(s) * autoClicksPerSec(s)) * away * OFFLINE_RATE;
 }

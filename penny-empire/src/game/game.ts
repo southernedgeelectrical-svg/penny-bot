@@ -23,11 +23,12 @@ export function newGame(now = Date.now()): GameState {
     lastActive: now,
     market: newMarket(),
     deals: { offers: [], active: [], nextId: 1 },
-    stats: { starsBought: 0, trades: 0, investProfit: 0, dealsDone: 0, dealsWon: 0, longshotWins: 0, bestRunEarned: 0 },
+    stats: { starsBought: 0, trades: 0, investProfit: 0, dealsDone: 0, dealsWon: 0, longshotWins: 0, bestRunEarned: 0, autoClicks: 0, maxCombo: 0 },
     daily: { lastClaim: null, streak: 0, bestStreak: 0 },
     achieved: [],
     claimed: [],
     tutorialSeen: false,
+    combo: 0,
   };
 }
 
@@ -48,7 +49,7 @@ export function applyOffline(s: GameState, now: number, seed: number): { state: 
   const earned = offlineIncome(s, now);
   const seconds = Math.max(0, (now - s.lastActive) / 1000);
   const rng = seededRng(seed);
-  let state: GameState = { ...earn(s, earned), lastActive: now };
+  let state: GameState = { ...earn(s, earned), lastActive: now, combo: 0 };
   state = { ...state, market: advanceMarket(state.market, seconds, rng) };
   if (investUnlocked(state)) state = refreshOffers(state, now, rng);
   return { state: checkAchievements(state), earned };
@@ -129,6 +130,8 @@ export function migrate(raw: unknown, now = Date.now()): GameState {
       dealsWon: num(stats.dealsWon, 0),
       longshotWins: num(stats.longshotWins, 0),
       bestRunEarned: num(stats.bestRunEarned, num(r.runEarned, 0)),
+      autoClicks: num(stats.autoClicks, 0),
+      maxCombo: num(stats.maxCombo, 0),
     },
     daily: {
       lastClaim: typeof daily.lastClaim === 'string' ? daily.lastClaim : null,
@@ -139,5 +142,6 @@ export function migrate(raw: unknown, now = Date.now()): GameState {
     claimed: strings(r.claimed),
     // Players coming from version 1 already know how to play.
     tutorialSeen: typeof r.tutorialSeen === 'boolean' ? r.tutorialSeen : num(r.totalTaps, 0) > 0,
+    combo: Math.min(1, Math.max(0, num(r.combo, 0))),
   };
 }

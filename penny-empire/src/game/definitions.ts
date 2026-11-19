@@ -1,4 +1,4 @@
-export type UpgradeKind = 'tap' | 'earner';
+export type UpgradeKind = 'tap' | 'earner' | 'auto';
 
 export interface UpgradeDef {
   id: string;
@@ -10,7 +10,7 @@ export interface UpgradeDef {
   baseCost: number;
   /** Each level costs this much more than the previous one. */
   costGrowth: number;
-  /** Per level: $ added per tap (tap) or $ per second (earner), before multipliers. */
+  /** Per level: $ added per tap (tap), $ per second (earner) or clicks per second (auto), before multipliers. */
   baseOutput: number;
 }
 
@@ -39,7 +39,14 @@ export const EARNERS: UpgradeDef[] = [
   { id: 'galactic', kind: 'earner', name: 'Galactic Bank', emoji: '🌌', description: '2B / sec', baseCost: 250_000_000_000_000, costGrowth: 1.1, baseOutput: 2_000_000_000 },
 ];
 
-export const ALL_UPGRADES: UpgradeDef[] = [...TAP_UPGRADES, ...EARNERS];
+/** Robots that tap the coin for you. Each auto click earns your full per-tap value. */
+export const AUTO_CLICKERS: UpgradeDef[] = [
+  { id: 'robot', kind: 'auto', name: 'Robo Finger', emoji: '🤖', description: '+0.5 clicks / sec', baseCost: 400, costGrowth: 1.22, baseOutput: 0.5 },
+  { id: 'drone', kind: 'auto', name: 'Tap Drone', emoji: '🛸', description: '+3 clicks / sec', baseCost: 80_000, costGrowth: 1.23, baseOutput: 3 },
+  { id: 'android', kind: 'auto', name: 'Golden Android', emoji: '🦾', description: '+20 clicks / sec', baseCost: 30_000_000, costGrowth: 1.24, baseOutput: 20 },
+];
+
+export const ALL_UPGRADES: UpgradeDef[] = [...TAP_UPGRADES, ...EARNERS, ...AUTO_CLICKERS];
 
 export const UPGRADE_BY_ID: Record<string, UpgradeDef> = Object.fromEntries(
   ALL_UPGRADES.map((u) => [u.id, u]),
@@ -68,3 +75,13 @@ export const ACHIEVEMENT_BONUS = 0.02;
 
 /** The Invest tab opens once you've earned this much in total. */
 export const INVEST_UNLOCK = 2_500;
+
+/** Auto clickers speed up as your coin upgrades: copper, silver, gold, platinum, diamond. */
+export const RANK_CLICK_SPEED = [1, 1.5, 2, 3, 5];
+
+/** Combo meter: each manual tap fills this much (0–1); it drains this much per second. */
+export const COMBO_PER_TAP = 0.05;
+export const COMBO_DECAY_PER_SEC = 0.3;
+/** A full combo multiplies tap value by this, plus a bit more for each coin rank. */
+export const COMBO_MAX_BASE = 2;
+export const COMBO_MAX_PER_RANK = 0.5;

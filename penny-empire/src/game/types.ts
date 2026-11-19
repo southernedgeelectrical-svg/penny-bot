@@ -50,6 +50,9 @@ export interface Stats {
   dealsWon: number;
   longshotWins: number;
   bestRunEarned: number;
+  autoClicks: number;
+  /** Highest combo meter reached (0–1). */
+  maxCombo: number;
 }
 
 export interface DailyState {
@@ -80,4 +83,6 @@ export interface GameState {
   achieved: string[];
   claimed: string[];
   tutorialSeen: boolean;
+  /** Combo meter, 0–1. Fills with fast manual tapping, drains over time. */
+  combo: number;
 }

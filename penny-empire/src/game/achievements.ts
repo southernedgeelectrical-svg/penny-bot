@@ -1,5 +1,5 @@
 /** Achievements: reach a goal, then claim it for a permanent income boost. */
-import { EARNERS } from './definitions';
+import { AUTO_CLICKERS, EARNERS } from './definitions';
 import { levelOf } from './economy';
 import { GameState } from './types';
 
@@ -16,11 +16,16 @@ export interface AchievementDef {
 
 const totalLevels = (s: GameState) => Object.values(s.levels).reduce((a, b) => a + b, 0);
 const businessesOwned = (s: GameState) => EARNERS.filter((d) => levelOf(s, d.id) > 0).length;
+const robotLevels = (s: GameState) => AUTO_CLICKERS.reduce((sum, d) => sum + levelOf(s, d.id), 0);
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'taps100', name: 'Warming Up', emoji: '👆', description: 'Tap 100 times', goal: 100, progress: (s) => s.totalTaps },
   { id: 'taps1k', name: 'Busy Fingers', emoji: '✋', description: 'Tap 1,000 times', goal: 1_000, progress: (s) => s.totalTaps },
   { id: 'taps10k', name: 'Tap Champion', emoji: '🏅', description: 'Tap 10,000 times', goal: 10_000, progress: (s) => s.totalTaps },
+  { id: 'combo', name: 'On Fire', emoji: '🔥', description: 'Fill the combo meter by tapping fast', goal: 1, progress: (s) => s.stats.maxCombo },
+  { id: 'robot1', name: 'Robot Helper', emoji: '🤖', description: 'Buy an auto clicker', goal: 1, progress: robotLevels },
+  { id: 'robot25', name: 'Robot Army', emoji: '🦾', description: 'Own 25 auto clicker levels at once', goal: 25, progress: robotLevels },
+  { id: 'autoclicks', name: 'Tireless', emoji: '⚙️', description: 'Auto clickers make 100,000 clicks', goal: 100_000, progress: (s) => s.stats.autoClicks },
   { id: 'earn10k', name: 'Pocket Money', emoji: '💵', description: 'Earn $10K in total', goal: 1e4, money: true, progress: (s) => s.allTimeEarned },
   { id: 'earn1m', name: 'Millionaire', emoji: '💰', description: 'Earn $1M in total', goal: 1e6, money: true, progress: (s) => s.allTimeEarned },
   { id: 'earn1b', name: 'Billionaire', emoji: '🏦', description: 'Earn $1B in total', goal: 1e9, money: true, progress: (s) => s.allTimeEarned },

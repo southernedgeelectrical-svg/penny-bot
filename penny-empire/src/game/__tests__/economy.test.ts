@@ -36,12 +36,14 @@ describe('starting out', () => {
     expect(perSecond(s)).toBe(0);
   });
 
-  it('earns money by tapping', () => {
-    let s = newGame(T0);
-    for (let i = 0; i < 10; i++) s = tap(s);
-    expect(s.balance).toBe(10);
+  it('earns money by tapping; the first tap is worth $1', () => {
+    let s = tap(newGame(T0));
+    expect(s.balance).toBe(1);
+    for (let i = 0; i < 9; i++) s = tap(s);
+    // Fast taps build the combo, so 10 quick taps earn a bit more than $10.
+    expect(s.balance).toBeGreaterThan(10);
     expect(s.totalTaps).toBe(10);
-    expect(s.runEarned).toBe(10);
+    expect(s.runEarned).toBe(s.balance);
   });
 
   it('can afford the first tap upgrade after 10 taps', () => {
@@ -49,7 +51,6 @@ describe('starting out', () => {
     for (let i = 0; i < 10; i++) s = tap(s);
     s = buy(s, 'finger', 1);
     expect(s.levels.finger).toBe(1);
-    expect(s.balance).toBe(0);
     expect(perTap(s)).toBe(2);
   });
 });

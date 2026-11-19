@@ -15,9 +15,11 @@ You start with **$0**. Tap the coin to earn cash, buy upgrades, and grow an empi
 | **Businesses** | 12 businesses (Lemonade Stand → Galactic Bank) that earn money every second, even when you aren't tapping. |
 | **Enhancing upgrades** | Upgrades can be upgraded too. At levels 10, 25, 50, 100, 150… an upgrade unlocks a ★ Enhance that **doubles its output**. Up to 11 stars per upgrade. |
 | **Buy ×1 / ×10 / MAX** | Buy levels in bulk. |
+| **Auto clickers** | Robo Finger, Tap Drone and Golden Android tap the coin for you (in the Tap tab). Each auto click earns your full per-tap value. They speed up with levels, ★ stars (×2 each) and your coin's metal: ×1.5 at Silver, ×2 Gold, ×3 Platinum, ×5 Diamond. They keep clicking while you're away. |
+| **Combo meter** | Tapping fast fills the 🔥 combo bar, which multiplies tap value (auto clicks too) up to ×2 at Copper and ×4 at Diamond. It cools down when you stop. |
 | **Invest → Deals** | Timed ventures (Garage Sale Flip → Treasure Expedition). Pay up front, wait 1–20 minutes, then collect. Safe deals pay ×1.3; long shots pay up to ×10 but can fall through (you get 30% back). Three offers at a time, refreshed every 10 minutes. Unlocks after $2,500 earned. |
 | **Invest → Markets** | Savings Bonds, Property Fund, Blue-Chip Stocks and Crypto Coin, with live prices and 10-minute charts. Riskier assets grow faster on average but swing harder. Buy 10% / 50% of your cash, sell everything at once. |
-| **Goals → Achievements** | 22 goals (taps, earnings, stars, deals, trades…). Claim each one for **+2% income forever**. |
+| **Goals → Achievements** | 26 goals (taps, earnings, stars, deals, trades…). Claim each one for **+2% income forever**. |
 | **Goals → Daily bonus** | Claim once a day. Rewards grow over a 7-day streak, with a jackpot on day 7. Missing a day restarts the streak. |
 | **Cash Out (prestige)** | After earning $1M in a run, sell everything for **gold bars**. You restart from $0, but every gold bar permanently adds +10% to all income. Achievements and your streak carry over. |
 | **Coin ranks** | Your coin changes metal as you earn: Copper Penny → Silver Dollar → Gold Coin → Platinum → Diamond. |

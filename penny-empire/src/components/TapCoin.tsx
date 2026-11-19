@@ -20,8 +20,13 @@ interface Float {
   x: number;
   y: number;
   label: string;
+  /** Made by an auto clicker (drawn smaller, in a different color). */
+  auto: boolean;
   progress: Animated.Value;
 }
+
+/** Most auto-click animations shown per second; faster robots show bigger amounts per pulse instead. */
+const MAX_AUTO_PULSES_PER_SEC = 5;
 
 interface Particle {
   id: number;
@@ -35,6 +40,9 @@ interface Particle {
 }
 
 const TIMES = [0, 0.25, 0.5, 0.75, 1];
+
+/** $46.6 → $47, but keep cents on small amounts like $1.5. */
+const roundForDisplay = (n: number) => (n >= 10 ? Math.round(n) : n);
 
 function makeParticle(id: number, x: number, y: number): Particle {
   // Upward-biased burst with gravity, sampled into keyframes for interpolate().
@@ -56,12 +64,15 @@ function makeParticle(id: number, x: number, y: number): Particle {
 }
 
 function TapCoinImpl({
-  perTap,
+  tapValue,
+  autoClicksPerSec = 0,
   rank,
   onTap,
   size = DEFAULT_COIN_SIZE,
 }: {
-  perTap: number;
+  /** What one tap is worth right now (including combo). */
+  tapValue: number;
+  autoClicksPerSec?: number;
   rank: CoinRank['id'];
   onTap: () => void;
   size?: number;
@@ -105,6 +116,22 @@ function TapCoinImpl({
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   }, [rank, flash]);
 
+  /** Floating amount + coin burst at (x, y) on the stage. */
+  const spawn = useCallback((x: number, y: number, label: string, particleCount: number, auto: boolean) => {
+    const float: Float = { id: nextId.current++, x, y, label, auto, progress: new Animated.Value(0) };
+    setFloats((f) => [...f.slice(-(MAX_FLOATS - 1)), float]);
+    Animated.timing(float.progress, { toValue: 1, duration: 1000, easing: Easing.out(Easing.quad), useNativeDriver: useNative }).start(() =>
+      setFloats((f) => f.filter((v) => v.id !== float.id)),
+    );
+    const burst = Array.from({ length: particleCount }, () => makeParticle(nextId.current++, x, y));
+    setParticles((ps) => [...ps.slice(-(MAX_PARTICLES - burst.length)), ...burst]);
+    for (const p of burst) {
+      Animated.timing(p.progress, { toValue: 1, duration: 750, easing: Easing.linear, useNativeDriver: useNative }).start(() =>
+        setParticles((ps) => ps.filter((v) => v.id !== p.id)),
+      );
+    }
+  }, []);
+
   const handlePress = useCallback(
     (e: GestureResponderEvent) => {
       onTap();
@@ -118,23 +145,30 @@ function TapCoinImpl({
       const ly = e.nativeEvent.locationY;
       const x = (STAGE - SIZE) / 2 + (Number.isFinite(lx) ? lx : SIZE / 2);
       const y = (STAGE_H - SIZE) / 2 + (Number.isFinite(ly) ? ly : SIZE / 2);
-
-      const float: Float = { id: nextId.current++, x, y, label: '+' + formatMoney(perTap), progress: new Animated.Value(0) };
-      setFloats((f) => [...f.slice(-(MAX_FLOATS - 1)), float]);
-      Animated.timing(float.progress, { toValue: 1, duration: 1000, easing: Easing.out(Easing.quad), useNativeDriver: useNative }).start(() =>
-        setFloats((f) => f.filter((v) => v.id !== float.id)),
-      );
-
-      const burst = Array.from({ length: PARTICLES_PER_TAP }, () => makeParticle(nextId.current++, x, y));
-      setParticles((ps) => [...ps.slice(-(MAX_PARTICLES - burst.length)), ...burst]);
-      for (const p of burst) {
-        Animated.timing(p.progress, { toValue: 1, duration: 750, easing: Easing.linear, useNativeDriver: useNative }).start(() =>
-          setParticles((ps) => ps.filter((v) => v.id !== p.id)),
-        );
-      }
+      spawn(x, y, '+' + formatMoney(roundForDisplay(tapValue)), PARTICLES_PER_TAP, false);
     },
-    [onTap, perTap, tapScale, SIZE, STAGE, STAGE_H],
+    [onTap, tapValue, tapScale, spawn, SIZE, STAGE, STAGE_H],
   );
+
+  // Auto clickers: visibly "tap" the coin. The money itself is added by the game loop;
+  // this only shows it, with at most a few pulses per second.
+  const pulsesPerSec = autoClicksPerSec > 0 ? Math.min(MAX_AUTO_PULSES_PER_SEC, Math.max(0.5, autoClicksPerSec)) : 0;
+  const pulseAmount = useRef(0);
+  useEffect(() => {
+    pulseAmount.current = pulsesPerSec > 0 ? (tapValue * autoClicksPerSec) / pulsesPerSec : 0;
+  }, [tapValue, autoClicksPerSec, pulsesPerSec]);
+  const pulseKey = Math.round(pulsesPerSec * 4); // only restart the timer when the rate really changes
+  useEffect(() => {
+    if (pulseKey === 0) return;
+    const timer = setInterval(() => {
+      tapScale.setValue(0.95);
+      Animated.spring(tapScale, { toValue: 1, friction: 4, tension: 200, useNativeDriver: useNative }).start();
+      const angle = Math.random() * Math.PI * 2;
+      const r = SIZE * 0.3 * Math.random();
+      spawn(STAGE / 2 + Math.cos(angle) * r, STAGE_H / 2 + Math.sin(angle) * r, '🤖 +' + formatMoney(roundForDisplay(pulseAmount.current)), 2, true);
+    }, 1000 / (pulseKey / 4));
+    return () => clearInterval(timer);
+  }, [pulseKey, spawn, tapScale, SIZE, STAGE, STAGE_H]);
 
   const palette = COIN_PALETTES[rank];
   const scale = Animated.multiply(tapScale, breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] }));
@@ -161,7 +195,7 @@ function TapCoinImpl({
         ]}
       />
 
-      <Pressable {...webNoPressDelay} onPressIn={handlePress} accessibilityRole="button" accessibilityLabel={`Tap to earn ${formatMoney(perTap)}`}>
+      <Pressable {...webNoPressDelay} onPressIn={handlePress} accessibilityRole="button" accessibilityLabel={`Tap to earn ${formatMoney(tapValue)}`}>
         <Animated.View style={[styles.coin, { width: SIZE, height: SIZE, borderRadius: SIZE / 2, transform: [{ scale }] }]}>
           <CoinArt size={SIZE} rank={rank} />
         </Animated.View>
@@ -201,6 +235,7 @@ function TapCoinImpl({
           pointerEvents="none"
           style={[
             styles.float,
+            f.auto && styles.floatAuto,
             {
               left: f.x - 100,
               top: f.y - 20,
@@ -266,6 +301,7 @@ const styles = StyleSheet.create({
   },
   particle: { position: 'absolute', borderWidth: 1.5, overflow: 'hidden' },
   particleShine: { position: 'absolute', top: 2, left: 2, width: '40%', height: '40%', borderRadius: 99, opacity: 0.8 },
+  floatAuto: { fontSize: 18, color: '#9EE7FF', textShadowColor: 'rgba(0, 30, 60, 0.9)' },
   float: {
     position: 'absolute',
     width: 200,

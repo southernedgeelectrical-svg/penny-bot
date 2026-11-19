@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TIER_LEVEL_REQUIREMENTS, UpgradeDef } from '../game/definitions';
 import { EnhanceStatus } from '../game/economy';
-import { formatMoney } from '../game/format';
+import { formatMoney, formatNumber } from '../game/format';
 import { colors, fonts, goldGradient, tierBadge } from '../theme';
 import { GameButton } from './GameButton';
 import { ProgressBar } from './ProgressBar';
@@ -23,6 +23,8 @@ interface Props {
 
 function UpgradeCardImpl({ def, level, tier, output, buyCount, buyCost, canBuy, enhance, onBuy, onEnhance }: Props) {
   const unit = def.kind === 'tap' ? '/tap' : '/sec';
+  // Auto clickers produce clicks, not money.
+  const outputText = def.kind === 'auto' ? `+${formatNumber(output)} clicks/sec` : `+${formatMoney(output)}${unit}`;
   const badge = tierBadge(tier);
   const owned = level > 0;
 
@@ -49,7 +51,7 @@ function UpgradeCardImpl({ def, level, tier, output, buyCount, buyCost, canBuy, 
               <Text style={styles.levelText}>LV {level}</Text>
             </View>
             <Text style={[styles.output, !owned && styles.outputMuted]} numberOfLines={1}>
-              {owned ? `+${formatMoney(output)}${unit}` : def.description}
+              {owned ? outputText : def.description}
             </Text>
           </View>
           <StarProgress status={enhance} level={level} tier={tier} />
