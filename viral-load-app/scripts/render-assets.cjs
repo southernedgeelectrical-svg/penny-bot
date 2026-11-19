@@ -16,6 +16,7 @@ async function page(b, { w, h, dpr = 1, st, icon, transparent, scale, cxp, cyp, 
   const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
   await p.addInitScript(([st, icon, transparent, scale, cxp, cyp]) => {
     localStorage.setItem('viral-load-v1', JSON.stringify(st));
+    window.__noAdapt = 1;
     if (icon) { window.__iconMode = 1; window.__iconScale = scale || 1; window.__iconCx = cxp; window.__iconCy = cyp; }
     if (transparent) window.__iconTransparent = 1;
   }, [st, icon, transparent, scale, cxp, cyp]);
