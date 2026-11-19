@@ -539,12 +539,15 @@ function renderGoals(){
 }
 
 // ---------- canvas ----------
-const cv=$('dish'); let ctx=cv.getContext('2d');
+const cv=$('dish'); const topCtx=cv.getContext('2d'); let ctx=topCtx;
 let W=0,H=0,DPR=1, cx=0, cy=0, R=60;
 function resize(){
   const r=$('dishwrap').getBoundingClientRect(); DPR=Math.min(2.5,window.devicePixelRatio||1);
-  W=r.width; H=r.height; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); ctx.imageSmoothingQuality='high';
+  W=r.width; H=r.height; cv.width=W*DPR; cv.height=H*DPR; topCtx.setTransform(DPR,0,0,DPR,0,0); topCtx.imageSmoothingQuality='high';
   const bg=$('bgv'), bgc=bg.getContext('2d'); bg.width=W*DPR; bg.height=H*DPR; bgc.setTransform(DPR,0,0,DPR,0,0);
+  resizeGL();
+}
+function resizeGL(){
   const gd=Math.min(2,window.devicePixelRatio||1)*GL_SCALE; $('glv').width=Math.round(W*gd); $('glv').height=Math.round(H*gd);
   cx=W*(window.__iconCx||0.5); cy=H*(ICON?(window.__iconCy||0.5):0.58); R=Math.max(32,Math.min(W*0.2,H*0.17))*(window.__iconScale||1);
 }
@@ -1220,8 +1223,8 @@ function frame(now){
   if(!window.__iconTransparent) drawCells(tNow, Math.min(1, Math.log10(r+1)/9));
   if(!window.__iconTransparent){ const vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.25,cx,cy,Math.max(W,H)*0.75); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(18,0,6,.78)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
   let glInfo=null;
-  if(GLR && !ICON){ slowT = dt>0.03 ? slowT+dt : Math.max(0,slowT-dt*0.5);
-    if(slowT>1.5 && GL_SCALE>0.5 && !window.__noAdapt){ GL_SCALE=Math.max(0.5,GL_SCALE*0.75); slowT=0; resize(); } }
+  if(GLR && !ICON){ slowT = (dt>0.03||window.__forceSlow) ? slowT+dt : Math.max(0,slowT-dt*0.5);
+    if(slowT>1.5 && GL_SCALE>0.5 && !window.__noAdapt){ GL_SCALE=Math.max(0.5,GL_SCALE*0.75); slowT=0; resizeGL(); } }
   if(GLR){ try{ glInfo=renderGL(tNow); drawAura(bctx,glInfo.Rb,glInfo.oy); }catch(e){ console.warn('WebGL render failed, falling back to 2D',e); GLR=null; glCv.hidden=true; } }
   ctx=top;
   emitAcc += dt*Math.min(14, Math.log10(r+1)*1.6);
