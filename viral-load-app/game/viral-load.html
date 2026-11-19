@@ -549,6 +549,17 @@ function resize(){
   cx=W*(window.__iconCx||0.5); cy=H*(ICON?(window.__iconCy||0.5):0.58); R=Math.max(32,Math.min(W*0.2,H*0.17))*(window.__iconScale||1);
 }
 window.addEventListener('resize',resize);
+try{ new ResizeObserver(()=>{ const r=$('dishwrap').getBoundingClientRect(); if(Math.abs(r.width-W)>0.5||Math.abs(r.height-H)>0.5) resize(); }).observe($('dishwrap')); }catch(e){}
+const misses=[];
+function virusCenter(){ const p=P||{size:1,tail:0}; const Rb=R*p.size; return {x:cx, y:cy-p.tail*Rb*0.62, Rb}; }
+// generous hit zone: body + spikes + a finger's width; phage also covers its tail and legs
+function onVirus(x,y){
+  const p=P; if(!p) return true; const c=virusCenter(), Rb=c.Rb, reach=Rb*p.len*1.8+26;
+  const rx=Rb*(1+p.elong*1.4)+reach, ry=Rb/(1+p.elong*0.35)+reach+(p.bend>0.01?Rb*0.3:0);
+  const dx=(x-c.x)/rx, dy=(y-c.y)/ry; if(dx*dx+dy*dy<=1) return true;
+  if(p.tail>0.5){ const legW=Rb*(0.8+0.4*p.len)*1.15+20; if(Math.abs(x-c.x)<=legW && y>=c.y && y<=c.y+Rb*2.75+20) return true; }
+  return false;
+}
 const cells=[]; for(let i=0;i<9;i++) cells.push({x:Math.random(),y:Math.random(),r:.12+Math.random()*.1,ph:Math.random()*6,sp:.02+Math.random()*.03});
 const particles=[], floats=[];
 let pulse=0, speciateFx=0, tNow=0, bounce=0, bounceV=0, mutFx=0, mutGene=-1, lastMutText=0, shownV=0;
@@ -579,7 +590,8 @@ cv.addEventListener('pointerdown',e=>{
     if(immune.hp<=0){ S.kills++; gainMut(1+Math.floor(S.spec/2)); floatText(`+${1+Math.floor(S.spec/2)} mutation`,immune.x,immune.y-20,'#43e6a0'); immune=null; toast('Macrophage neutralized'); }
     renderTop(); return;
   }
-  // tap = replicate
+  // tap = replicate, but only on (or right next to) the virus
+  if(!onVirus(x,y)){ misses.push({x,y,t:0}); if(misses.length>6) misses.shift(); return; }
   const nowMs=performance.now();
   combo = (nowMs-lastTapMs<420) ? Math.min(40,combo+1) : Math.max(0,combo-4); lastTapMs=nowMs;
   const cm=comboMult(); if(cm>S.maxCombo) S.maxCombo=cm;
@@ -587,8 +599,8 @@ cv.addEventListener('pointerdown',e=>{
   if(crit) v*=12;
   crit ? (blip(150,.28,'triangle',.11,.35), blip(300,.2,'sine',.05,.5)) : blip(200+combo*14,.09,'sine',.08,.45);
   earn(v); S.taps++; pulse=1;
-  emit(crit?22:5+Math.min(10,Math.floor(Math.log10(v+1))), cx, cy, crit);
-  floatText((crit?'BURST +':'+')+fmt(v), x+(Math.random()*70-35), y-10-Math.random()*20, crit?'#ffc34d':'#ffffff');
+  const vc=virusCenter(); emit(crit?22:5+Math.min(10,Math.floor(Math.log10(v+1))), x*0.6+vc.x*0.4, y*0.6+vc.y*0.4, crit);
+  floatText((crit?'BURST +':'+')+fmt(v), x+(Math.random()*16-8), y-6-Math.random()*6, crit?'#ffc34d':'#ffffff');
   renderTop();
 });
 function claimGolden(){
@@ -1234,9 +1246,11 @@ function frame(now){
   if(golden){ golden.t+=dt; golden.x+=golden.vx*dt; golden.y+=golden.vy*dt; if(golden.x<30||golden.x>W-30) golden.vx*=-1; if(golden.y<60||golden.y>H-30) golden.vy*=-1; if(golden.t>14) golden=null; }
   drawGolden(tNow);
   if(!ICON) drawGenomeTrack();
+  for(let i=misses.length-1;i>=0;i--){ const m=misses[i]; m.t+=dt; if(m.t>0.45){ misses.splice(i,1); continue; }
+    ctx.beginPath(); ctx.arc(m.x,m.y,8+m.t*40,0,7); ctx.strokeStyle=`rgba(200,210,255,${0.35*(1-m.t/0.45)})`; ctx.lineWidth=1.5; ctx.stroke(); }
   ctx.textAlign='center';
   for(let i=floats.length-1;i>=0;i--){ const f=floats[i]; f.life-=dt*(f.big?0.55:0.9); if(f.life<=0){floats.splice(i,1);continue;}
-    const e=1-f.life, rise=(1-Math.pow(1-e,3))*(f.big?40:60), pop=f.big?1:1+0.25*Math.max(0,1-e*6);
+    const e=1-f.life, rise=(1-Math.pow(1-e,3))*(f.big?36:28), pop=f.big?1:1+0.25*Math.max(0,1-e*6);
     ctx.globalAlpha=Math.min(1,f.life*2); ctx.font=`600 ${Math.round((f.big?12:14)*pop)}px "IBM Plex Mono", monospace`; ctx.fillStyle=f.color;
     ctx.fillText(f.txt,f.x,f.y-rise); }
   ctx.globalAlpha=1;
