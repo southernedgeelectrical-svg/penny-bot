@@ -39,7 +39,7 @@ button:focus-visible{outline:2px solid var(--dapi);outline-offset:2px}
 .stat .v{font-family:var(--f-mono);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .stat.mut .v{color:var(--gfp)} .stat.gen .v{color:var(--amber)}
 /* dish */
-.dishwrap{position:relative;min-height:0;overflow:hidden;background:radial-gradient(circle at 50% 50%, #0d1430 0%, var(--bg) 75%)}
+.dishwrap{position:relative;min-height:0;overflow:hidden;background:radial-gradient(circle at 50% 55%, #1c0a14 0%, #0a060c 60%, var(--bg) 100%)}
 canvas#dish{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;cursor:pointer;display:block}
 .hud{position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:12px;pointer-events:none;display:flex;flex-direction:column;gap:2px}
 .count{font-family:var(--f-display);font-weight:800;font-size:clamp(30px,6vw,52px);letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 0 24px rgba(255,90,134,.35)}
@@ -607,11 +607,11 @@ const GENES=[
   {k:'coil', n:'Matrix proteins',   h:300},
 ];
 const SHAPES={
-  phage: {size:.78,elong:0,   facet:1,square:0,bend:0,dens:5, len:.10,tip:.1, fluid:.05,tail:1,coil:.9},
-  icosa: {size:1,  elong:0,   facet:1,square:0,bend:0,dens:12,len:.14,tip:.1, fluid:.08,tail:0,coil:.6},
-  corona:{size:.88,elong:0,   facet:0,square:0,bend:0,dens:34,len:.30,tip:.5, fluid:.55,tail:0,coil:.5},
-  filo:  {size:.6, elong:1.35,facet:0,square:0,bend:1,dens:40,len:.12,tip:.1, fluid:.45,tail:0,coil:1.0},
-  pox:   {size:.92,elong:.28, facet:0,square:1,bend:0,dens:16,len:.08,tip:.85,fluid:.2, tail:0,coil:.4},
+  phage: {size:.78,elong:0,   facet:1,square:0,bend:0,dens:6, len:.16,tip:.55, fluid:.05,tail:1,coil:.9},
+  icosa: {size:1,  elong:0,   facet:1,square:0,bend:0,dens:12,len:.22,tip:.55, fluid:.08,tail:0,coil:.6},
+  corona:{size:.88,elong:0,   facet:0,square:0,bend:0,dens:40,len:.36,tip:.15, fluid:.55,tail:0,coil:.5},
+  filo:  {size:.6, elong:1.35,facet:0,square:0,bend:1,dens:40,len:.17,tip:.2, fluid:.45,tail:0,coil:1.0},
+  pox:   {size:.92,elong:.28, facet:0,square:1,bend:0,dens:18,len:.16,tip:.85,fluid:.2, tail:0,coil:.4},
 };
 function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return h>>>0;}
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -662,7 +662,7 @@ function onMutation(n){
 }
 function gainMut(n){ S.mut+=n; S.mutRun+=n; onMutation(n); }
 
-// ---------- lifelike renderer: lit 3D bodies, protein-covered membranes, glossy spike trimers ----------
+// ---------- 3D helpers ----------
 const LIGHT=(()=>{const v=[-0.45,-0.6,0.66],l=Math.hypot(...v);return v.map(c=>c/l);})();
 const ballCache={};
 function ball(h,s,l){
@@ -698,152 +698,220 @@ function tracePath(pts){
   for(let i=0;i<n;i++){ const a=pts[i], b=pts[(i+1)%n]; ctx.quadraticCurveTo(a[0],a[1],(a[0]+b[0])/2,(a[1]+b[1])/2); }
   ctx.closePath();
 }
+// ---------- menacing look: wet dark bodies, pulsing veins, barbed thorns, a heartbeat ----------
+function heartbeat(t){ if(reduced) return 0.3; const x=(t%1.45)-0.06; return Math.exp(-Math.pow(x/0.06,2))+0.6*Math.exp(-Math.pow((x-0.22)/0.07,2)); }
+const v3={ add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], sc:(a,k)=>[a[0]*k,a[1]*k,a[2]*k], dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  norm:a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l];} };
+function rndUnit(r){ const z=2*r()-1, ph=r()*Math.PI*2, s=Math.sqrt(1-z*z); return [Math.cos(ph)*s,Math.sin(ph)*s,z]; }
+function tangent(d,p){ return v3.norm(v3.add(d,v3.sc(p,-v3.dot(d,p)))); }
+let VEINS=[], veinKey='';
+function veins(){
+  const key=S.code+'#'+S.spec; if(key===veinKey) return VEINS; veinKey=key;
+  const r=mulberry(hashStr('veins'+key)), out=[];
+  function walk(p,d,steps,depth){ const line=[p]; let cur=p, dir=d;
+    for(let s=0;s<steps;s++){ dir=tangent(v3.norm(v3.add(dir,v3.sc(rndUnit(r),0.75))),cur); cur=v3.norm(v3.add(cur,v3.sc(dir,0.085))); line.push(cur);
+      if(depth<2 && r()<0.2) walk(cur,tangent(v3.add(dir,v3.sc(rndUnit(r),1.4)),cur),Math.max(3,Math.floor(steps*0.55)),depth+1); }
+    out.push({pts:line,w:2.6-depth*0.8}); }
+  for(let k=0;k<16;k++){ const p=rndUnit(r); walk(p,tangent(rndUnit(r),p),11,0); }
+  return VEINS=out;
+}
+const qpt=(a,c,b,u)=>{const m=1-u;return [m*m*a[0]+2*m*u*c[0]+u*u*b[0], m*m*a[1]+2*m*u*c[1]+u*u*b[1]];};
+let HB=0, BODY_H=0, ICO_POLYS=[];
 function drawSpikes(list,Rb,t,isBack,shrink){
-  const p=P, w0=Math.max(1.6,Rb*0.04), mf=mutFx, sh=p.hue, ss=72;
+  const p=P, mf=mutFx, gh=p.hue;
   for(const s of list){
-    const depth=(s.z+1)/2;
-    const b=surf(s.v,t,Rb,shrink);
-    const L=1+p.len*1.7*s.g*(1+0.3*mf*Math.sin(s.i+t*18));
-    const tx=b[0]*L, ty=b[1]*L;
-    const hh=sh+p.vary*60*Math.sin(s.i*2.3);
-    const lit=isBack?30:40+depth*14;
-    const w=w0*(0.7+0.4*depth)*(0.55+0.45*s.g);
-    ctx.globalAlpha=isBack?0.75:1;
-    // stalk: dark core + light edge toward the light = a little cylinder
-    ctx.lineCap='round';
-    ctx.strokeStyle=`hsl(${hh} ${ss-20}% ${lit-14}%)`; ctx.lineWidth=w;
-    ctx.beginPath(); ctx.moveTo(b[0],b[1]); ctx.lineTo(tx,ty); ctx.stroke();
-    ctx.strokeStyle=`hsla(${hh},${ss}%,${lit+22}%,.8)`; ctx.lineWidth=w*0.35;
-    ctx.beginPath(); ctx.moveTo(b[0]-w*0.2,b[1]-w*0.25); ctx.lineTo(tx-w*0.2,ty-w*0.25); ctx.stroke();
-    // head: knob, trimer club, or forked fibre
-    const ang=Math.atan2(ty-b[1],tx-b[0]), tr=w*(1.15+p.tip*0.8)*(0.55+0.45*s.g), spr=ball(hh,ss,lit);
-    if(p.tip<0.36){ const d=tr*2.3; ctx.drawImage(spr,tx-d/2,ty-d/2,d,d); }
-    else if(p.tip<0.72){
-      const d=tr*1.75, px=-Math.sin(ang), py=Math.cos(ang), spin=t*0.8+s.i;
-      for(let k=0;k<3;k++){ const o=Math.cos(spin+k*2.094)*tr*0.55, f=Math.sin(spin+k*2.094)*tr*0.25;
-        const hx=tx+px*o+Math.cos(ang)*(tr*0.35+f), hy=ty+py*o+Math.sin(ang)*(tr*0.35+f); ctx.drawImage(spr,hx-d/2,hy-d/2,d,d); }
-    } else {
-      const fl=tr*2.3; ctx.lineWidth=w*0.8; ctx.strokeStyle=`hsl(${hh} ${ss-10}% ${lit}%)`;
-      for(const sg of [-0.6,0.6]){ const ex=tx+Math.cos(ang+sg)*fl, ey=ty+Math.sin(ang+sg)*fl; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(ex,ey); ctx.stroke(); const d=w*2; ctx.drawImage(spr,ex-d/2,ey-d/2,d,d); }
+    const depth=(s.z+1)/2, b=surf(s.v,t,Rb,shrink*0.97);
+    const L=1+p.len*1.8*s.g*(1+0.25*mf*Math.sin(s.i+t*18));
+    const tip=[b[0]*L,b[1]*L], dx=tip[0]-b[0], dy=tip[1]-b[1], ln=Math.hypot(dx,dy);
+    const wb=Rb*0.085*(0.55+0.45*depth)*(0.45+0.55*s.g);
+    if(ln<wb*0.6){ // pointing straight at you: a dark puncture with a hot core
+      const d=wb*2.4; ctx.drawImage(ball(BODY_H,40,14),b[0]-d/2,b[1]-d/2,d,d);
+      ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.5+0.4*HB; ctx.drawImage(sprite(gh),b[0]-d*0.4,b[1]-d*0.4,d*0.8,d*0.8); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; continue; }
+    const nx=-dy/ln, ny=dx/ln;
+    const writhe=reduced?0:Math.sin(t*1.6+s.i*1.37)*0.22;
+    const hook=(writhe+(p.tip-0.5)*0.35)*ln;
+    const c=[b[0]+dx*0.55+nx*hook, b[1]+dy*0.55+ny*hook];
+    ctx.globalAlpha=isBack?0.55:1;
+    // thorn body
+    const g=ctx.createLinearGradient(b[0],b[1],tip[0],tip[1]);
+    g.addColorStop(0,`hsl(${BODY_H} 45% 7%)`); g.addColorStop(.55,`hsl(${gh} 60% ${isBack?12:20}%)`); g.addColorStop(1,`hsl(${gh} 100% ${isBack?30:52+HB*14}%)`);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(b[0]+nx*wb,b[1]+ny*wb);
+    ctx.quadraticCurveTo(c[0]+nx*wb*0.45,c[1]+ny*wb*0.45,tip[0],tip[1]);
+    ctx.quadraticCurveTo(c[0]-nx*wb*0.45,c[1]-ny*wb*0.45,b[0]-nx*wb,b[1]-ny*wb); ctx.closePath(); ctx.fill();
+    // wet edge highlight on the lit side
+    ctx.strokeStyle=`hsla(${gh},70%,78%,${isBack?.12:.4})`; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(b[0]+nx*wb*0.7,b[1]+ny*wb*0.7); ctx.quadraticCurveTo(c[0]+nx*wb*0.35,c[1]+ny*wb*0.35,tip[0],tip[1]); ctx.stroke();
+    const tipCol=`hsl(${gh} 100% ${isBack?28:50+HB*15}%)`;
+    if(p.tip>=0.36 && p.tip<0.72){ // backward barbs
+      for(const u of [0.62,0.8]){ const q=qpt(b,c,tip,u), bl=wb*(1.9-u); ctx.fillStyle=tipCol;
+        for(const sg of [1,-1]){ ctx.beginPath(); ctx.moveTo(q[0]+nx*wb*0.25*sg,q[1]+ny*wb*0.25*sg); ctx.lineTo(q[0]+nx*bl*sg-dx/ln*bl*0.9,q[1]+ny*bl*sg-dy/ln*bl*0.9); ctx.lineTo(q[0]-dx/ln*bl*0.5,q[1]-dy/ln*bl*0.5); ctx.closePath(); ctx.fill(); } }
+    } else if(p.tip>=0.72){ // splayed claws
+      const q=qpt(b,c,tip,0.68), cl=ln*0.42, w2=wb*0.5;
+      for(const sg of [1,-1]){ const a=Math.atan2(dy,dx)+sg*0.55, ex=q[0]+Math.cos(a)*cl, ey=q[1]+Math.sin(a)*cl, cc=[q[0]+Math.cos(a-sg*0.5)*cl*0.6,q[1]+Math.sin(a-sg*0.5)*cl*0.6];
+        ctx.fillStyle=tipCol; ctx.beginPath(); ctx.moveTo(q[0]+nx*w2,q[1]+ny*w2); ctx.quadraticCurveTo(cc[0],cc[1],ex,ey); ctx.quadraticCurveTo(cc[0],cc[1],q[0]-nx*w2,q[1]-ny*w2); ctx.closePath(); ctx.fill(); }
     }
+    if(!isBack){ ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.35+0.45*HB; const d=wb*3.2; ctx.drawImage(sprite(gh),tip[0]-d/2,tip[1]-d/2,d,d); ctx.globalCompositeOperation='source-over'; }
     ctx.globalAlpha=1;
   }
 }
-function drawIcosa(Rb,t,alpha,bodyH,bodyS,bodyL){
+function drawIcosa(Rb,t,alpha,bodyH){
   if(alpha<=0.01) return;
   const p=P, ex=1+p.elong*1.4, ey=1/(1+p.elong*0.35), k=Rb*1.04;
   const V=IV.map(rot), pr=v=>[v[0]*k*ex, v[1]*k*ey];
   const faces=[];
   for(const f of IF){ const a=V[f[0]],b=V[f[1]],c=V[f[2]]; const n=[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3]; if(n[2]<=0) continue;
-    const nl=Math.hypot(...n), d=(n[0]*LIGHT[0]+n[1]*LIGHT[1]+n[2]*LIGHT[2])/nl; faces.push({f,n,z:n[2],sh:Math.max(0,d)}); }
+    const nl=Math.hypot(...n), d=(n[0]*LIGHT[0]+n[1]*LIGHT[1]+n[2]*LIGHT[2])/nl; faces.push({f,z:n[2]/nl,sh:Math.max(0,d)}); }
   faces.sort((a,b)=>a.z-b.z);
+  ICO_POLYS=faces.map(F=>[pr(V[F.f[0]]),pr(V[F.f[1]]),pr(V[F.f[2]])]);
   ctx.save(); ctx.globalAlpha=alpha; ctx.lineJoin='round';
   for(const F of faces){
     const a=pr(V[F.f[0]]), b=pr(V[F.f[1]]), c=pr(V[F.f[2]]);
     ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.closePath();
-    const L=bodyL-22+F.sh*44;
+    const L=3+F.sh*17, spec=Math.pow(F.sh,10);
     const g=ctx.createLinearGradient(a[0],a[1],(b[0]+c[0])/2,(b[1]+c[1])/2);
-    g.addColorStop(0,`hsl(${bodyH} ${bodyS}% ${L+6}%)`); g.addColorStop(1,`hsl(${bodyH} ${bodyS}% ${L-6}%)`);
+    g.addColorStop(0,`hsl(${bodyH} 22% ${L+5+spec*22}%)`); g.addColorStop(1,`hsl(${bodyH} 28% ${Math.max(2,L-4)}%)`);
     ctx.fillStyle=g; ctx.fill();
-    ctx.strokeStyle=`hsla(${bodyH},${bodyS}%,${Math.min(92,L+22)}%,.55)`; ctx.lineWidth=1.2; ctx.stroke();
-    // capsomeres: hexamer bumps on each face
-    const cx3=(a[0]+b[0]+c[0])/3, cy3=(a[1]+b[1]+c[1])/3, d=Rb*0.17*(0.6+0.4*F.z/ (Math.hypot(...F.n)||1));
-    const spr=ball(bodyH,bodyS+6,Math.round(L/4)*4);
-    ctx.drawImage(spr,cx3-d/2,cy3-d/2,d,d);
-    for(const q of [a,b,c]){ const mx=cx3+(q[0]-cx3)*0.52, my=cy3+(q[1]-cy3)*0.52, dd=d*0.62; ctx.drawImage(spr,mx-dd/2,my-dd/2,dd,dd); }
+    const cx3=(a[0]+b[0]+c[0])/3, cy3=(a[1]+b[1]+c[1])/3, d=Rb*0.16*(0.55+0.45*F.z);
+    // chitinous nubs with a glowing pore in the middle
+    const spr=ball(bodyH,35,Math.round((10+F.sh*22)/4)*4);
+    for(const q of [a,b,c]){ const mx=cx3+(q[0]-cx3)*0.5, my=cy3+(q[1]-cy3)*0.5, dd=d*0.55; ctx.drawImage(spr,mx-dd/2,my-dd/2,dd,dd); }
+    ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=alpha*(0.25+0.5*HB)*F.z; ctx.drawImage(sprite(P.hue),cx3-d*0.45,cy3-d*0.45,d*0.9,d*0.9); ctx.globalAlpha=alpha; ctx.globalCompositeOperation='source-over';
   }
-  // pentamers at front vertices
-  V.forEach((v,i)=>{ if(v[2]<0.15) return; const q=pr(v), d=Rb*0.15*(0.5+0.5*v[2]); ctx.drawImage(ball(bodyH+20,bodyS+12,bodyL+6),q[0]-d/2,q[1]-d/2,d,d); });
+  // seams glow like molten cracks
+  ctx.globalCompositeOperation='lighter';
+  for(const F of faces){ const a=pr(V[F.f[0]]), b=pr(V[F.f[1]]), c=pr(V[F.f[2]]);
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.closePath();
+    ctx.strokeStyle=`hsla(${P.hue},100%,50%,${(0.12+0.3*HB)*F.z})`; ctx.lineWidth=4; ctx.stroke();
+    ctx.strokeStyle=`hsla(${P.hue},100%,72%,${(0.25+0.45*HB)*F.z})`; ctx.lineWidth=1; ctx.stroke(); }
+  ctx.globalCompositeOperation='source-over';
   ctx.restore();
 }
+function drawVeins(Rb,t,shrink,alpha){
+  if(alpha<=0.02) return;
+  const gh=P.hue, list=veins();
+  ctx.globalCompositeOperation='lighter'; ctx.lineCap='round'; ctx.lineJoin='round';
+  for(const v of list){
+    const R3=v.pts.map(rot);
+    for(let i=1;i<R3.length;i++){ const a=R3[i-1], b=R3[i]; const z=Math.min(a[2],b[2]); if(z<0.04) continue;
+      const pa=surf(a,t,Rb,shrink*0.995), pb=surf(b,t,Rb,shrink*0.995), al=alpha*Math.min(1,z*1.8)*(0.3+0.7*HB);
+      ctx.strokeStyle=`hsla(${gh},100%,45%,${al*0.35})`; ctx.lineWidth=v.w*3.2; ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke();
+      ctx.strokeStyle=`hsla(${gh},100%,68%,${al})`; ctx.lineWidth=v.w*0.9; ctx.beginPath(); ctx.moveTo(pa[0],pa[1]); ctx.lineTo(pb[0],pb[1]); ctx.stroke(); }
+  }
+  ctx.globalCompositeOperation='source-over';
+}
 function drawVirus(t){
-  const p=P, Rb=R*p.size, mf=mutFx, ex=1+p.elong*1.4;
-  const bodyH=p.hue+200*0+22, bodyS=34, bodyL=44;
-  const ia=clamp((p.facet-0.35)/0.4,0,1)*(1-clamp(p.square*1.5,0,1))*(1-clamp(p.elong-0.4,0,1)); // how icosahedral
+  const p=P, mf=mutFx; HB=heartbeat(t);
+  const Rb=R*p.size*(1+0.03*HB), ex=1+p.elong*1.4;
+  const bodyH=BODY_H=p.hue+(((345-p.hue+540)%360)-180)*0.25; // pulled slightly toward blood red
+  const ia=clamp((p.facet-0.35)/0.4,0,1)*(1-clamp(p.square*1.5,0,1))*(1-clamp(p.elong-0.4,0,1));
   const shrink=1-0.16*ia;
   const sx=1+bounce*0.08, sy=1-bounce*0.05, oy=-p.tail*Rb*0.62;
-  const yaw=reduced?0.6:t*0.3, pitch=(p.tail>0.5?0.18:0.42)+(reduced?0:Math.sin(t*0.23)*0.14);
+  const yaw=reduced?0.6:t*0.22, pitch=(p.tail>0.5?0.18:0.42)+(reduced?0:Math.sin(t*0.19)*0.14);
   RX=[Math.cos(yaw),Math.sin(yaw),Math.cos(pitch),Math.sin(pitch)];
   ctx.save(); ctx.translate(cx,cy+oy); ctx.scale(sx,sy);
-  // soft fluorescent halo
+  // dark aura that eats the light, then a sick glow at its heart
+  const hr=Rb*(2.6+p.elong*0.8);
+  let ag=ctx.createRadialGradient(0,0,Rb*0.6,0,0,hr); ag.addColorStop(0,'rgba(0,0,0,.6)'); ag.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,hr,0,7); ctx.fill();
   ctx.globalCompositeOperation='lighter';
-  const hr=Rb*(2.3+p.elong*0.8), halo=ctx.createRadialGradient(0,0,Rb*0.5,0,0,hr);
-  halo.addColorStop(0,`hsla(${p.hue},95%,55%,${0.16*p.glow+0.3*mf})`); halo.addColorStop(1,'hsla(0,0%,0%,0)');
-  ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(0,0,hr,0,7); ctx.fill();
+  ag=ctx.createRadialGradient(0,0,Rb*0.7,0,0,Rb*1.9*Math.max(1,ex*0.7)); ag.addColorStop(0,`hsla(${p.hue},100%,40%,${0.12+0.14*HB+0.3*mf})`); ag.addColorStop(1,'hsla(0,0%,0%,0)');
+  ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,hr,0,7); ctx.fill();
   ctx.globalCompositeOperation='source-over';
-  // contact shadow on the dish
-  ctx.save(); ctx.globalAlpha=0.35; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(Rb*0.15,Rb*(1.25+p.tail*1.6),Rb*0.9*ex,Rb*0.18,0,0,7); ctx.filter='blur(8px)'; ctx.fill(); ctx.restore();
-  // spikes split by depth
   const back=[], front=[], nmax=Math.min(SPK.length,Math.ceil(p.dens));
   for(let i=0;i<nmax;i++){ const g=Math.min(1,p.dens-i); if(g<=0) break; const v=rot(SPK[i]);
     if(p.tail>0.5 && v[1]>0.55) continue; (v[2]<0?back:front).push({v,z:v[2],g,i}); }
   back.sort((a,b)=>a.z-b.z); front.sort((a,b)=>a.z-b.z);
   if(p.tail>0.01) drawTail(Rb,t);
   drawSpikes(back,Rb,t,true,shrink);
-  // body silhouette
+  // body: near-black, wet, lit hard from the top-left
   const N=128, pts=new Array(N);
   for(let i=0;i<N;i++){ const q=outline(i/N*Math.PI*2,t); pts[i]=[q[0]*Rb*shrink,q[1]*Rb*shrink]; }
-  const lx=-Rb*0.38*ex, ly=-Rb*0.42;
-  const g=ctx.createRadialGradient(lx,ly,Rb*0.05,0,0,Rb*1.08*Math.max(1,ex*0.8));
-  g.addColorStop(0,`hsl(${bodyH} ${bodyS}% ${bodyL+30+mf*14}%)`);
-  g.addColorStop(.5,`hsl(${bodyH} ${bodyS}% ${bodyL}%)`);
-  g.addColorStop(.88,`hsl(${bodyH} ${bodyS+6}% ${bodyL-22}%)`);
-  g.addColorStop(1,`hsl(${bodyH} ${bodyS+10}% ${bodyL-30}%)`);
+  const lx=-Rb*0.36*ex, ly=-Rb*0.4;
+  const g=ctx.createRadialGradient(lx,ly,Rb*0.04,0,0,Rb*1.08*Math.max(1,ex*0.8));
+  g.addColorStop(0,`hsl(${bodyH} 40% ${34+mf*20}%)`); g.addColorStop(.35,`hsl(${bodyH} 45% 17%)`);
+  g.addColorStop(.8,`hsl(${bodyH} 50% 8%)`); g.addColorStop(1,`hsl(${bodyH} 50% 3%)`);
   tracePath(pts); ctx.fillStyle=g; ctx.fill();
-  if(p.elong>0.5){ const lg=ctx.createLinearGradient(0,-Rb*0.7,0,Rb*0.7); lg.addColorStop(0,'rgba(255,255,255,.14)'); lg.addColorStop(.5,'rgba(0,0,0,0)'); lg.addColorStop(1,'rgba(0,0,0,.35)'); tracePath(pts); ctx.fillStyle=lg; ctx.fill(); }
-  // membrane proteins / lipid texture
+  if(p.elong>0.5){ const lg=ctx.createLinearGradient(0,-Rb*0.7,0,Rb*0.7); lg.addColorStop(0,'rgba(255,255,255,.08)'); lg.addColorStop(.5,'rgba(0,0,0,0)'); lg.addColorStop(1,'rgba(0,0,0,.5)'); tracePath(pts); ctx.fillStyle=lg; ctx.fill(); }
   ctx.save(); tracePath(pts); ctx.clip();
+  // pores and nodules
   const nb=Math.round((110+p.coil*90)*(1-ia));
-  for(let i=0;i<nb && i<SURF.length;i++){ const v=rot(SURF[i]); if(v[2]<0.02) continue;
+  for(let i=0;i<nb && i<SURF.length;i++){ const v=rot(SURF[i]); if(v[2]<0.05) continue;
     const q=surf(v,t,Rb,shrink*0.97), sh=Math.max(0,v[0]*LIGHT[0]+v[1]*LIGHT[1]+v[2]*LIGHT[2]);
-    const d=Rb*0.085*(0.45+0.55*v[2])*(1+0.35*p.fluid*Math.sin(i*1.7+t));
-    ctx.globalAlpha=0.35+0.55*v[2]; ctx.drawImage(ball(bodyH+(i%3)*10,bodyS+10,Math.round((bodyL-14+sh*30)/4)*4),q[0]-d/2,q[1]-d/2,d,d); }
-  ctx.globalAlpha=1;
-  if(p.square>0.2){ // poxvirus surface tubules
+    const d=Rb*0.08*(0.45+0.55*v[2])*(1+0.35*p.fluid*Math.sin(i*1.7+t));
+    if(i%3===0){ // pit: dark hole, lit lower lip, faint glow deep inside
+      const ang=Math.atan2(q[1],q[0]);
+      ctx.save(); ctx.translate(q[0],q[1]); ctx.rotate(ang); ctx.scale(Math.max(0.3,v[2]),1);
+      ctx.fillStyle='rgba(0,0,0,.85)'; ctx.beginPath(); ctx.arc(0,0,d*0.42,0,7); ctx.fill();
+      ctx.strokeStyle=`hsla(${bodyH},40%,${20+sh*35}%,.7)`; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(0,0,d*0.46,-1.2,1.2); ctx.stroke();
+      ctx.globalCompositeOperation='lighter'; ctx.fillStyle=`hsla(${p.hue},100%,50%,${0.25*HB*v[2]})`; ctx.beginPath(); ctx.arc(0,0,d*0.2,0,7); ctx.fill(); ctx.globalCompositeOperation='source-over';
+      ctx.restore();
+    } else {
+      ctx.globalAlpha=0.3+0.6*v[2]; ctx.drawImage(ball(bodyH,40,Math.round((6+sh*26)/4)*4),q[0]-d/2,q[1]-d/2,d,d); ctx.globalAlpha=1;
+    }
+  }
+  drawVeins(Rb,t,shrink,1-ia);
+  if(p.square>0.2){ // poxvirus: knotted, glistening tubules
     ctx.lineCap='round';
     for(let i=0;i<26;i++){ const x=(((i*37)%19)/19-0.5)*Rb*2.0, y=(((i*53)%13)/13-0.5)*Rb*1.25, wv=Math.sin(t*1.5+i)*2, a=(i*0.7)%3;
       ctx.save(); ctx.translate(x,y); ctx.rotate(a);
-      ctx.strokeStyle=`hsla(${bodyH},${bodyS}%,${bodyL-24}%,${0.7*p.square})`; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-8,1); ctx.quadraticCurveTo(0,-6+wv,8,1); ctx.stroke();
-      ctx.strokeStyle=`hsla(${bodyH},${bodyS}%,${bodyL+24}%,${0.7*p.square})`; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(-8,0); ctx.quadraticCurveTo(0,-7+wv,8,0); ctx.stroke(); ctx.restore(); }
+      ctx.strokeStyle=`rgba(0,0,0,${0.75*p.square})`; ctx.lineWidth=4.5; ctx.beginPath(); ctx.moveTo(-8,1); ctx.quadraticCurveTo(0,-6+wv,8,1); ctx.stroke();
+      ctx.strokeStyle=`hsla(${bodyH},45%,40%,${0.7*p.square})`; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(-8,0); ctx.quadraticCurveTo(0,-7+wv,8,0); ctx.stroke(); ctx.restore(); }
   }
+  // wet specular sheen
+  const sp=ctx.createRadialGradient(lx*0.95,ly*0.95,0,lx*0.95,ly*0.95,Rb*0.32);
+  sp.addColorStop(0,'rgba(255,240,240,.4)'); sp.addColorStop(.4,'rgba(255,230,230,.1)'); sp.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=sp; ctx.fillRect(-Rb*3,-Rb*3,Rb*6,Rb*6);
   ctx.restore();
-  // fluorescent rim light + dark edge
+  // hard backlit rim
   tracePath(pts); ctx.lineJoin='round';
-  ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=2; ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,.7)'; ctx.lineWidth=2.5; ctx.stroke();
   ctx.globalCompositeOperation='lighter';
-  ctx.strokeStyle=`hsla(${p.hue},95%,62%,${0.28+mf*0.4})`; ctx.lineWidth=3.5; ctx.stroke();
+  ctx.strokeStyle=`hsla(${p.hue},100%,45%,${0.35+0.35*HB+mf*0.3})`; ctx.lineWidth=4; ctx.stroke();
+  ctx.strokeStyle=`hsla(${p.hue},100%,75%,${0.25+0.25*HB})`; ctx.lineWidth=1; ctx.stroke();
   if(mf>0.02){
-    ctx.save(); ctx.translate(4*mf,0); tracePath(pts); ctx.strokeStyle=`rgba(255,60,140,${0.6*mf})`; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.translate(-4*mf,0); tracePath(pts); ctx.strokeStyle=`rgba(60,220,255,${0.6*mf})`; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(5*mf,0); tracePath(pts); ctx.strokeStyle=`rgba(255,40,80,${0.7*mf})`; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(-5*mf,0); tracePath(pts); ctx.strokeStyle=`rgba(40,255,200,${0.5*mf})`; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
   }
   ctx.globalCompositeOperation='source-over';
-  drawIcosa(Rb,t,ia,bodyH,bodyS,bodyL);
+  drawIcosa(Rb,t,ia,bodyH);
+  if(ia>0.05){ ctx.save(); ctx.beginPath(); for(const T3 of ICO_POLYS){ ctx.moveTo(T3[0][0],T3[0][1]); ctx.lineTo(T3[1][0],T3[1][1]); ctx.lineTo(T3[2][0],T3[2][1]); ctx.closePath(); } ctx.clip('nonzero'); drawVeins(Rb,t,1.12,0.75*ia); ctx.restore(); }
   drawSpikes(front,Rb,t,false,shrink);
   ctx.restore();
   if(mf>0.01){
     for(let k=0;k<2;k++){ const ph=Math.min(1,(1-mf)*1.3-k*0.25); if(ph<=0) continue;
-      ctx.beginPath(); ctx.arc(cx,cy+oy,Rb*(1.3+ph*2.6),0,7); ctx.strokeStyle=`hsla(${p.hue2},95%,65%,${(1-ph)*0.7})`; ctx.lineWidth=2.5*(1-ph)+0.5; ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(cx,cy+oy,Rb*(1.3+ph*2.6),0,7); ctx.strokeStyle=`hsla(${p.hue},100%,55%,${(1-ph)*0.6})`; ctx.lineWidth=2.5*(1-ph)+0.5; ctx.stroke(); }
   }
 }
 function drawTail(Rb,t){
-  const p=P, al=p.tail, hue=p.hue+22;
+  const p=P, al=p.tail, hue=BODY_H, gh=p.hue;
   ctx.save(); ctx.globalAlpha=al;
-  const top=Rb*0.9, contract=1-0.3*Math.max(0,bounce), L=Rb*1.1*contract, w=Rb*0.22*(1+0.18*Math.max(0,bounce));
-  const cyl=(x0,w)=>{ const g=ctx.createLinearGradient(x0-w/2,0,x0+w/2,0); g.addColorStop(0,`hsl(${hue} 30% 18%)`); g.addColorStop(.32,`hsl(${hue} 34% 62%)`); g.addColorStop(.6,`hsl(${hue} 32% 40%)`); g.addColorStop(1,`hsl(${hue} 30% 14%)`); return g; };
-  ctx.fillStyle=cyl(0,w*1.6); ctx.beginPath(); ctx.ellipse(0,top+Rb*0.04,w*0.8,Rb*0.07,0,0,7); ctx.fill();
+  const top=Rb*0.9, contract=1-0.3*Math.max(0,bounce), L=Rb*1.05*contract, w=Rb*0.22*(1+0.18*Math.max(0,bounce));
+  const cyl=(w)=>{ const g=ctx.createLinearGradient(-w/2,0,w/2,0); g.addColorStop(0,`hsl(${hue} 40% 3%)`); g.addColorStop(.3,`hsl(${hue} 30% 30%)`); g.addColorStop(.55,`hsl(${hue} 40% 10%)`); g.addColorStop(1,`hsl(${hue} 40% 2%)`); return g; };
+  ctx.fillStyle=cyl(w*1.6); ctx.beginPath(); ctx.ellipse(0,top+Rb*0.04,w*0.8,Rb*0.07,0,0,7); ctx.fill();
   const y0=top+Rb*0.08;
-  ctx.fillStyle=cyl(0,w); ctx.fillRect(-w/2,y0,w,L);
-  for(let k=0;k<9;k++){ const y=y0+(k+0.5)*L/9; ctx.fillStyle=cyl(0,w*1.12); ctx.beginPath(); ctx.ellipse(0,y,w*0.56,L/22,0,0,7); ctx.fill(); }
-  const by=y0+L; ctx.fillStyle=cyl(0,Rb*0.7); ctx.beginPath(); ctx.ellipse(0,by,Rb*0.35,Rb*0.07,0,0,7); ctx.fill();
-  const legs=6, fl=Rb*(0.75+0.4*p.len);
+  ctx.fillStyle=cyl(w); ctx.fillRect(-w/2,y0,w,L);
+  ctx.globalCompositeOperation='lighter';
+  for(let k=0;k<9;k++){ const y=y0+(k+0.5)*L/9, a=(0.15+0.5*HB)*(0.5+0.5*Math.sin(t*4-k*0.8));
+    ctx.strokeStyle=`hsla(${gh},100%,55%,${a})`; ctx.lineWidth=1.6; ctx.beginPath(); ctx.ellipse(0,y,w*0.5,L/26,0,0,Math.PI); ctx.stroke(); }
+  ctx.globalCompositeOperation='source-over';
+  const by=y0+L; ctx.fillStyle=cyl(Rb*0.7); ctx.beginPath(); ctx.ellipse(0,by,Rb*0.34,Rb*0.07,0,0,7); ctx.fill();
+  // six jointed legs, creeping like a spider
+  const legs=6, fl=Rb*(0.8+0.4*p.len);
   ctx.lineCap='round'; ctx.lineJoin='round';
   for(let i=0;i<legs;i++){
-    const s=(i/(legs-1))*2-1, ph=reduced?0:Math.sin(t*2.2+i*0.9)*0.12, d=0.55+0.45*Math.abs(Math.cos(i*1.7+t*0.35));
-    const kx=s*fl*0.85, ky=by-Rb*0.15+ph*Rb, fx=s*fl*1.05, fy=by+Rb*0.55+Math.abs(s)*Rb*0.05;
+    const s=(i/(legs-1))*2-1, creep=reduced?0:Math.sin(t*2.6+i*1.1), d=0.55+0.45*Math.abs(Math.cos(i*1.7+t*0.35));
+    const hx=s*Rb*0.26, hy=by, kx=s*fl*0.8, ky=by-Rb*(0.45+0.12*creep), fx=s*fl*(1.12+0.06*creep), fy=by+Rb*(0.62-0.05*Math.max(0,creep));
     ctx.globalAlpha=al*(0.55+0.45*d);
-    ctx.strokeStyle=`hsl(${hue} 30% 16%)`; ctx.lineWidth=3.6; ctx.beginPath(); ctx.moveTo(s*Rb*0.28,by); ctx.quadraticCurveTo(kx,ky,fx,fy); ctx.stroke();
-    ctx.strokeStyle=`hsl(${hue} 40% 62%)`; ctx.lineWidth=1.3; ctx.beginPath(); ctx.moveTo(s*Rb*0.28,by-1); ctx.quadraticCurveTo(kx,ky-1,fx,fy-1); ctx.stroke();
-    const dd=7; ctx.drawImage(ball(hue,40,50),fx-dd/2,fy-dd/2,dd,dd);
+    const lw=Math.max(4,Rb*0.075);
+    ctx.strokeStyle=`hsl(${hue} 35% 3%)`; ctx.lineWidth=lw+2; ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(kx,ky); ctx.lineTo(fx,fy); ctx.stroke();
+    ctx.strokeStyle=`hsl(${hue} 32% 16%)`; ctx.lineWidth=lw; ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(kx,ky); ctx.lineTo(fx,fy); ctx.stroke();
+    ctx.strokeStyle=`hsla(${hue},35%,48%,.7)`; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(hx,hy-lw*0.3); ctx.lineTo(kx,ky-lw*0.3); ctx.lineTo(fx-lw*0.2,fy); ctx.stroke();
+    ctx.globalCompositeOperation='lighter'; ctx.strokeStyle=`hsla(${gh},100%,55%,${0.25+0.5*HB})`; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(kx,ky); ctx.lineTo(fx,fy); ctx.stroke(); ctx.globalCompositeOperation='source-over';
+    const kd=lw*2; ctx.drawImage(ball(hue,40,20),kx-kd/2,ky-kd/2,kd,kd);
+    // hooked claw
+    const ang=Math.atan2(fy-ky,fx-kx), cl=lw*3.2, sgn=s<0?-1:1; ctx.fillStyle=`hsl(${gh} 100% ${42+HB*16}%)`;
+    const ex=fx+Math.cos(ang)*cl, ey=fy+Math.sin(ang)*cl, cx2=fx+Math.cos(ang+0.9*sgn)*cl*0.9, cy2=fy+Math.sin(ang+0.9*sgn)*cl*0.9;
+    ctx.beginPath(); ctx.moveTo(fx+Math.cos(ang+1.57)*lw*0.6,fy+Math.sin(ang+1.57)*lw*0.6); ctx.quadraticCurveTo(cx2,cy2,ex,ey); ctx.quadraticCurveTo(fx,fy,fx+Math.cos(ang-1.57)*lw*0.6,fy+Math.sin(ang-1.57)*lw*0.6); ctx.closePath(); ctx.fill();
   }
   ctx.restore();
 }
@@ -852,10 +920,10 @@ function drawCells(t, infected){
     const c=cells[i], x=c.x*W+Math.sin(t*c.sp+c.ph)*20, y=c.y*H+Math.cos(t*c.sp*0.8+c.ph)*16, r=c.r*Math.min(W,H)*0.95;
     const inf = i < Math.round(infected*cells.length);
     const g=ctx.createRadialGradient(x-r*0.2,y-r*0.2,r*0.1,x,y,r);
-    g.addColorStop(0, inf?'rgba(255,90,134,.07)':'rgba(67,230,160,.05)'); g.addColorStop(1, inf?'rgba(255,90,134,.015)':'rgba(67,230,160,.01)');
+    g.addColorStop(0, inf?'rgba(150,20,50,.12)':'rgba(90,110,140,.04)'); g.addColorStop(1, inf?'rgba(120,10,40,.03)':'rgba(90,110,140,.01)');
     ctx.beginPath(); ctx.ellipse(x,y,r,r*0.82,c.ph,0,7); ctx.fillStyle=g; ctx.fill();
-    ctx.strokeStyle = inf? 'rgba(255,90,134,.15)':'rgba(67,230,160,.09)'; ctx.lineWidth=1; ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(x+r*0.15,y-r*0.1,r*0.3,r*0.26,c.ph,0,7); ctx.fillStyle='rgba(123,147,255,.08)'; ctx.fill();
+    ctx.strokeStyle = inf? 'rgba(200,30,70,.2)':'rgba(110,130,160,.08)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x+r*0.15,y-r*0.1,r*0.3,r*0.26,c.ph,0,7); ctx.fillStyle=inf?'rgba(90,0,25,.25)':'rgba(80,95,130,.06)'; ctx.fill();
     if(inf && !reduced){ for(let k=0;k<4;k++){ const a=t*0.3+k*1.57+i, bx=x+Math.cos(a)*r*0.95, by=y+Math.sin(a)*r*0.78; ctx.globalAlpha=.5; ctx.drawImage(sprite(P?P.hue:340),bx-6,by-6,12,12); ctx.globalAlpha=1; } }
   }
 }
@@ -907,6 +975,7 @@ function frame(now){
   ctx.clearRect(0,0,W,H);
   const r=vps();
   if(!window.__iconTransparent) drawCells(tNow, Math.min(1, Math.log10(r+1)/9));
+  if(!window.__iconTransparent){ const vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.25,cx,cy,Math.max(W,H)*0.75); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(18,0,6,.78)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
   emitAcc += dt*Math.min(14, Math.log10(r+1)*1.6);
   while(emitAcc>1){ emitAcc--; if(!ICON) emit(1,cx,cy-(P?P.tail:0)*R*0.5,false); }
   if(speciateFx>0){ speciateFx-=dt; ctx.beginPath(); ctx.arc(cx,cy,R*(1+(1.5-speciateFx)*4),0,7); ctx.strokeStyle=`rgba(255,195,77,${Math.max(0,speciateFx/1.5)})`; ctx.lineWidth=3; ctx.stroke(); }
