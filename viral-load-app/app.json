@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Viral Load",
+    "slug": "viral-load",
+    "owner": "hambones-team",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#060912",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.southernedgeelectrical.viralload"
+    },
+    "android": {
+      "package": "com.southernedgeelectrical.viralload",
+      "adaptiveIcon": {
+        "backgroundColor": "#060912",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png"
+      },
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#060912",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4b3411d3-df27-41a7-97da-6186bdc44d38"
+      }
+    }
+  }
+}

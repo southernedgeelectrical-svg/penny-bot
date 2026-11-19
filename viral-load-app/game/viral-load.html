@@ -1,0 +1,980 @@
+<title>Viral Load</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen app. Phone = stats bar / dish / tabbed lab panel stacked; wide = dish left, lab panel right.
+   Single deliberate look: a fluorescence microscope field (DAPI blue, GFP green, mCherry red on deep slide black). */
+:root{
+  color-scheme: dark;
+  --bg:#060912; --slide:#0b1020; --panel:#0f1528; --panel2:#141b33; --line:#222b4a;
+  --fg:#e7ecff; --muted:#8a93b6; --dim:#5a6388;
+  --dapi:#7b93ff; --gfp:#43e6a0; --mch:#ff5a86; --amber:#ffc34d;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Instrument Sans", system-ui, -apple-system, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  background:var(--bg);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+button{font:inherit;color:inherit}
+button:focus-visible{outline:2px solid var(--dapi);outline-offset:2px}
+.app{height:100%;display:grid;grid-template-rows:auto minmax(220px,42%) 1fr;}
+@media (min-width:900px){
+  .app{grid-template-columns:minmax(0,1.15fr) minmax(380px,1fr);grid-template-rows:auto 1fr}
+  .stats{grid-column:1 / -1}
+  .dishwrap{grid-row:2;grid-column:1}
+  .lab{grid-row:2;grid-column:2;border-left:1px solid var(--line);border-top:0 !important}
+}
+/* stats bar */
+.stats{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:var(--slide);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--f-display);font-weight:800;font-size:18px;letter-spacing:-.02em;display:flex;align-items:baseline;gap:8px;margin-right:auto}
+.brand small{font-family:var(--f-mono);font-weight:500;font-size:11px;color:var(--muted);letter-spacing:.04em}
+.stat{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
+.stat .k{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.stat .v{font-family:var(--f-mono);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat.mut .v{color:var(--gfp)} .stat.gen .v{color:var(--amber)}
+/* dish */
+.dishwrap{position:relative;min-height:0;overflow:hidden;background:radial-gradient(circle at 50% 50%, #0d1430 0%, var(--bg) 75%)}
+canvas#dish{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;cursor:pointer;display:block}
+.hud{position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:12px;pointer-events:none;display:flex;flex-direction:column;gap:2px}
+.count{font-family:var(--f-display);font-weight:800;font-size:clamp(30px,6vw,52px);letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 0 24px rgba(255,90,134,.35)}
+.count-sub{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.titer{font-family:var(--f-mono);font-size:11px;color:var(--dapi);letter-spacing:.03em}
+.strain{position:absolute;right:max(14px,env(safe-area-inset-right,0px));top:12px;text-align:right;pointer-events:none}
+.strain .fam{font-family:var(--f-display);font-weight:700;font-size:15px}
+.strain .code{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.alert{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);font-family:var(--f-mono);font-size:12px;
+  padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(11,16,32,.85);white-space:nowrap;pointer-events:none;max-width:calc(100% - 32px);overflow:hidden;text-overflow:ellipsis}
+.alert.immune{border-color:var(--dapi);color:var(--dapi)}
+.alert.boost{border-color:var(--amber);color:var(--amber)}
+.hint{position:absolute;left:50%;top:58%;transform:translateX(-50%);font-family:var(--f-mono);font-size:12px;color:var(--muted);pointer-events:none;animation:blink 2s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+/* lab panel */
+.lab{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-top:1px solid var(--line)}
+.tabs{display:flex;gap:4px;padding-block:8px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);align-items:center}
+.tab{flex:1;background:none;border:1px solid transparent;border-radius:8px;padding:8px 4px;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer;position:relative}
+.tab[aria-selected="true"]{color:var(--fg);background:var(--panel2);border-color:var(--line)}
+.tab .dot{position:absolute;top:5px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--gfp)}
+.pane{flex:1;overflow-y:auto;padding-block:12px 24px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));-webkit-overflow-scrolling:touch}
+.pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 10px}
+.pane-head h2{margin:0;font-family:var(--f-display);font-size:16px;font-weight:700}
+.pane-head p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-shrink:0}
+.seg button{background:none;border:0;padding:6px 10px;font-family:var(--f-mono);font-size:12px;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel2);color:var(--fg)}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;text-align:left;width:100%}
+.row:disabled{cursor:not-allowed}
+.row:not(:disabled):hover{border-color:#34406b}
+.row.locked{opacity:.45}
+.ico{width:40px;height:40px;border-radius:9px;display:grid;place-items:center;background:var(--slide);border:1px solid var(--line)}
+.ico canvas{width:28px;height:28px}
+.meta{min-width:0}
+.meta .n{font-weight:600;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.meta .n .lv{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-weight:500}
+.meta .d{color:var(--muted);font-size:12px;margin-top:2px}
+.meta .bar{height:3px;border-radius:2px;background:var(--line);margin-top:6px;overflow:hidden}
+.meta .bar i{display:block;height:100%;background:var(--dapi)}
+.price{font-family:var(--f-mono);font-size:13px;font-weight:600;text-align:right;white-space:nowrap}
+.price small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.row.can .price{color:var(--gfp)}
+.row:not(.can) .price{color:var(--dim)}
+.branch{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin:14px 2px 6px}
+.branch:first-child{margin-top:0}
+.branch b{font-weight:600}
+.b-trans b{color:var(--mch)} .b-res b{color:var(--dapi)} .b-vir b{color:var(--amber)}
+.mx .price{color:var(--muted) !important}
+/* speciate */
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.card h3{margin:0;font-family:var(--f-display);font-size:20px;letter-spacing:-.01em}
+.card p{margin:0;color:var(--muted);line-height:1.5;max-width:60ch}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.big-btn{border:1px solid var(--amber);background:rgba(255,195,77,.1);color:var(--amber);border-radius:10px;padding:12px 16px;font-weight:700;font-family:var(--f-display);font-size:16px;cursor:pointer}
+.big-btn:disabled{border-color:var(--line);color:var(--dim);background:none;cursor:not-allowed}
+.big-btn.confirm{background:var(--amber);color:#1a1200}
+.lineage{display:flex;gap:6px;flex-wrap:wrap}
+.lineage span{font-family:var(--f-mono);font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+.lineage span.done{color:var(--fg);border-color:#3a4675}
+.lineage span.cur{color:var(--amber);border-color:var(--amber)}
+.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--muted);cursor:pointer;font-size:12px}
+.ghost.danger{border-color:var(--mch);color:var(--mch)}
+.stack{display:flex;flex-direction:column;gap:12px}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(3,5,12,.72);display:grid;place-items:center;z-index:20;padding:16px}
+.modal .card{max-width:380px;width:100%}
+.modal .card .gain{font-family:var(--f-display);font-weight:800;font-size:32px;color:var(--mch)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;z-index:30;max-width:calc(100% - 32px)}
+.combo{margin-top:6px;display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px;color:var(--amber)}
+.combo .track{width:90px;height:4px;border-radius:2px;background:rgba(255,195,77,.18);overflow:hidden}
+.combo .track i{display:block;height:100%;background:var(--amber)}
+.mutagen{position:absolute;right:max(12px,env(safe-area-inset-right,0px));bottom:12px;display:flex;flex-direction:column;align-items:flex-end;gap:1px;
+  background:rgba(11,16,32,.85);border:1px solid var(--gfp);color:var(--gfp);border-radius:10px;padding:7px 11px;font-weight:600;font-size:12px;cursor:pointer}
+.mutagen small{font-family:var(--f-mono);font-weight:400;font-size:11px;opacity:.85}
+.mutagen:disabled{border-color:var(--line);color:var(--dim);cursor:not-allowed}
+.alert{left:max(12px,env(safe-area-inset-left,0px)) !important;transform:none !important;max-width:calc(100% - 170px) !important}
+.icon-btn{background:none;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--muted);font-family:var(--f-mono);font-size:11px;cursor:pointer}
+.row.flash{animation:flash .45s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(67,230,160,.6);border-color:var(--gfp)}100%{box-shadow:0 0 0 10px rgba(67,230,160,0)}}
+.goal{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
+.goal .ck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:12px;color:var(--bg)}
+.goal.done .ck{background:var(--gfp);border-color:var(--gfp)}
+.goal.done{opacity:.6}
+.goal .n{font-weight:600}.goal .d{color:var(--muted);font-size:12px;margin-top:2px}
+.goal .rw{font-family:var(--f-mono);font-size:12px;color:var(--gfp);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.hint{animation:none}.row.flash{animation:none}}
+@media (max-width:440px){
+  .stats{gap:10px;flex-wrap:nowrap}
+  .brand{font-size:16px} .brand small{display:none}
+  .stat .k{font-size:9px;letter-spacing:.08em} .stat .v{font-size:13px}
+  .icon-btn{padding:4px 7px}
+}
+</style>
+
+<div class="app" id="app">
+  <header class="stats">
+    <div class="brand">Viral Load <small id="strainShort">PHAGE</small></div>
+    <div class="stat"><span class="k">per sec</span><span class="v" id="sVps">0</span></div>
+    <div class="stat mut"><span class="k">mutations</span><span class="v" id="sMut">0</span></div>
+    <div class="stat gen"><span class="k">genome</span><span class="v" id="sGen">0</span></div>
+    <button class="icon-btn" id="soundBtn" aria-pressed="true" aria-label="Sound on">♪ on</button>
+  </header>
+
+  <section class="dishwrap" id="dishwrap" aria-label="Culture dish. Tap to replicate.">
+    <canvas id="dish"></canvas>
+    <div class="hud">
+      <div class="count" id="count">0</div>
+      <div class="count-sub"><span id="countSub">virions</span></div>
+      <div class="titer" id="titer">titer: — PFU/mL</div>
+      <div class="combo" id="combo" hidden><span id="comboTxt">×1.0 frenzy</span><span class="track"><i id="comboBar"></i></span></div>
+    </div>
+    <div class="strain"><div class="fam" id="famName">Bacteriophage</div><div class="code" id="strainCode">VX-1a</div></div>
+    <div class="hint" id="hint">tap the virus to replicate</div>
+    <div class="alert" id="alert" hidden></div>
+    <button class="mutagen" id="mutagenBtn">Induce mutation<small id="mutagenCost">—</small></button>
+  </section>
+
+  <section class="lab">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-rep" aria-selected="true" data-tab="rep">Replicate</button>
+      <button class="tab" role="tab" id="tab-evo" aria-selected="false" data-tab="evo">Evolve<span class="dot" id="evoDot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-spe" aria-selected="false" data-tab="spe">Speciate<span class="dot" id="speDot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-log" aria-selected="false" data-tab="log">Goals<span class="dot" id="goalDot" hidden></span></button>
+    </div>
+
+    <div class="pane" id="pane-rep">
+      <div class="pane-head">
+        <div><h2>Replication machinery</h2><p>Every 25 owned doubles that machine's output.</p></div>
+        <div class="seg" id="buyMode">
+          <button data-m="1" aria-pressed="true">×1</button><button data-m="10" aria-pressed="false">×10</button><button data-m="max" aria-pressed="false">Max</button>
+        </div>
+      </div>
+      <div class="list" id="prodList"></div>
+    </div>
+
+    <div class="pane" id="pane-evo" hidden>
+      <div class="pane-head"><div><h2>Traits</h2><p>Copy errors become mutations. Spend them to evolve. Traits reset when you speciate.</p></div></div>
+      <div id="traitList"></div>
+    </div>
+
+    <div class="pane" id="pane-spe" hidden>
+      <div class="stack">
+        <div class="card">
+          <h3>Speciation</h3>
+          <p>Jump to a new viral family. Virions, machinery and traits reset. You keep your genome: each genome point adds +10% to all replication, forever.</p>
+          <dl class="kv">
+            <dt>Virions this strain</dt><dd id="spRun">0</dd>
+            <dt>Needed to speciate</dt><dd>10.0M</dd>
+            <dt>Genome gained</dt><dd id="spGain" style="color:var(--amber)">+0</dd>
+            <dt>Next family</dt><dd id="spNext">—</dd>
+          </dl>
+          <button class="big-btn" id="speBtn" disabled>Speciate</button>
+        </div>
+        <div class="card">
+          <h3 style="font-size:16px">Lineage</h3>
+          <div class="lineage" id="lineage"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-log" hidden>
+      <div class="stack">
+        <div class="pane-head" style="margin-bottom:0"><div><h2>Research goals</h2><p id="goalSum">Each goal pays out mutations once.</p></div></div>
+        <div class="list" id="goalList"></div>
+        <div class="card">
+          <h3 style="font-size:16px">Lab log</h3>
+          <dl class="kv" id="logKv"></dl>
+        </div>
+        <div class="card">
+          <h3 style="font-size:16px">Field guide</h3>
+          <p><b style="color:var(--amber)">Tap frenzy</b>: tap fast to build a multiplier up to ×3. It fades when you stop.</p>
+          <p><b style="color:var(--gfp)">Induce mutation</b> spends virions to force a mutation right now. Each dose costs more within the same strain.</p>
+          <p><b style="color:var(--dapi)">Macrophages</b> drift in and halve replication. Tap one 5 times to neutralize it and harvest a mutation.</p>
+          <p><b style="color:var(--amber)">Recombination events</b> glow gold. Tap one for a burst of virions, mutations, or a 7× replication surge.</p>
+          <p>While the tab is closed your strain goes <b>latent</b> and keeps replicating at a reduced rate for up to 8 hours.</p>
+        </div>
+        <div><button class="ghost danger" id="wipeBtn">Sterilize lab (erase save)</button></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="modal" id="modal" hidden><div class="card" id="modalCard"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const ICON=!!window.__iconMode;
+// ---------- data ----------
+const PRODUCERS = [
+  {id:'ribo',  name:'Ribosome Hijack',  desc:'Bends host ribosomes to your code', base:15,     rate:0.2,   hue:340},
+  {id:'poly',  name:'Polymerase Swarm', desc:'Error-prone copying, fast',         base:120,    rate:1.4,   hue:150},
+  {id:'capsid',name:'Capsid Foundry',   desc:'Self-assembling protein shells',    base:1300,   rate:9,     hue:220},
+  {id:'lytic', name:'Lytic Burst',      desc:'Cells rupture, virions spill out',  base:14000,  rate:52,    hue:15},
+  {id:'tissue',name:'Tissue Colony',    desc:'Whole epithelium, converted',       base:160000, rate:300,   hue:280},
+  {id:'organ', name:'Organ Reservoir',  desc:'A lung becomes a factory',          base:1.9e6,  rate:1800,  hue:190},
+  {id:'host',  name:'Host Network',     desc:'Hosts pass you between them',       base:2.4e7,  rate:11000, hue:45},
+  {id:'zoo',   name:'Zoonotic Leap',    desc:'Cross into a new species',          base:3.2e8,  rate:72000, hue:110},
+  {id:'bio',   name:'Biosphere Bloom',  desc:'Every kingdom of life, infected',   base:4.6e9,  rate:480000,hue:0},
+];
+const TRAITS = [
+  {id:'aero', br:'trans', name:'Aerosol Stability', max:20, base:2, g:1.65, d:l=>`+25% all replication (now +${l*25}%)`},
+  {id:'recep',br:'trans', name:'Receptor Affinity', max:15, base:1, g:1.8,  d:l=>`Tap yield ×2 (now ×${2**l})`},
+  {id:'range',br:'trans', name:'Host Range',        max:6,  base:4, g:2.0,  d:l=>`Machinery 5% cheaper (now −${l*5}%)`},
+  {id:'drift',br:'res',   name:'Antigenic Drift',   max:5,  base:2, g:1.9,  d:l=>`Macrophages slow you less (now −${50-l*10}%)`},
+  {id:'lat',  br:'res',   name:'Latency',           max:5,  base:3, g:1.8,  d:l=>`Offline replication rate (now ${25+l*15}%)`},
+  {id:'proof',br:'res',   name:'Sloppy Proofreading',max:4, base:3, g:2.2,  d:l=>`Copy errors come faster (×${(1.5-l*.05).toFixed(2)} spacing)`},
+  {id:'cyto', br:'vir',   name:'Cytopathic Effect', max:10, base:3, g:1.9,  d:l=>`Each tap adds ${l*2}% of per-sec`},
+  {id:'burst',br:'vir',   name:'Burst Size',        max:8,  base:2, g:1.85, d:l=>`${l*4}% chance a tap bursts ×12`},
+  {id:'host2',br:'vir',   name:'Immune Evasion',    max:3,  base:6, g:2.5,  d:l=>`Recombination events appear ${l*20}% more often`},
+];
+const BRANCH = {trans:['b-trans','Transmission'], res:['b-res','Resilience'], vir:['b-vir','Virulence']};
+const FAMILIES = [
+  {name:'Bacteriophage', short:'PHAGE', shape:'phage', hue:150},
+  {name:'Picornavirus',  short:'PICORNA',shape:'icosa', hue:200},
+  {name:'Coronavirus',   short:'CORONA', shape:'corona',hue:345},
+  {name:'Filovirus',     short:'FILO',   shape:'filo',  hue:280},
+  {name:'Poxvirus',      short:'POX',    shape:'pox',   hue:30},
+  {name:'Orthomyxovirus',short:'ORTHO',  shape:'corona',hue:190},
+  {name:'Giant Mimivirus',short:'MIMI',  shape:'icosa', hue:55},
+  {name:'Xenovirus',     short:'XENO',   shape:'phage', hue:310},
+];
+const SPEC_REQ = 1e7;
+const KEY = 'viral-load-v1';
+
+// ---------- state ----------
+function fresh(){return {v:0,run:0,life:0,taps:0,owned:{},traits:{},mut:0,nextMut:50,mutRun:0,genome:0,spec:0,
+  buy:'1',sound:true,goals:[],maxCombo:1,dose:0,last:Date.now(),started:Date.now(),best:0,boostUntil:0,boostMult:1,kills:0,events:0,code:randCode()};}
+function randCode(){const L='abcdefghjk';return 'VX-'+(1+Math.floor(Math.random()*98))+L[Math.floor(Math.random()*L.length)];}
+let S = fresh();
+const hot = window.claude && window.claude.hot;
+function load(seed){
+  let d = seed && seed.S ? seed.S : null;
+  if(!d){ try{ const raw = localStorage.getItem(KEY); if(raw) d = JSON.parse(raw);}catch(e){} }
+  if(d) S = Object.assign(fresh(), d);
+}
+function save(){ S.last = Date.now(); try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+if(hot && hot.snapshot){ try{ hot.snapshot(()=>({S})); }catch(e){} }
+
+// ---------- math ----------
+const T = id => S.traits[id]||0;
+const own = id => S.owned[id]||0;
+let immune = null, golden = null;
+function immunePenalty(){ return immune ? 0.5 + 0.1*T('drift') : 1; }
+function boostMult(){ return Date.now() < S.boostUntil ? S.boostMult : 1; }
+function globalMult(){ return (1+0.1*S.genome)*(1+0.25*T('aero'))*boostMult()*immunePenalty(); }
+function prodOut(p){ const o=own(p.id); return p.rate*o*Math.pow(2,Math.floor(o/25)); }
+function vps(){ let s=0; for(const p of PRODUCERS) s+=prodOut(p); return s*globalMult(); }
+function costMult(){ return 1-0.05*T('range'); }
+function unitCost(p,o){ return p.base*costMult()*Math.pow(1.15,o); }
+function costN(p,n){ const o=own(p.id); return p.base*costMult()*Math.pow(1.15,o)*(Math.pow(1.15,n)-1)/0.15; }
+function maxN(p){ const c0=unitCost(p,own(p.id)); if(S.v<c0) return 0; return Math.floor(Math.log(S.v*0.15/c0+1)/Math.log(1.15)); }
+function buyCount(p){ if(S.buy==='max') return Math.max(1,maxN(p)); return +S.buy; }
+function tapValue(){ return (1*Math.pow(2,T('recep')))*(1+0.1*S.genome)*boostMult() + vps()*0.02*T('cyto'); }
+function traitCost(t){ return Math.ceil(t.base*Math.pow(t.g,T(t.id))); }
+function mutSpacing(){ return 1.5-0.05*T('proof'); }
+function specGain(){ return S.run<SPEC_REQ?0:Math.floor(Math.sqrt(S.run/1e6)); }
+function family(i){ return FAMILIES[i % FAMILIES.length]; }
+
+function earn(n){
+  S.v+=n; S.run+=n; S.life+=n;
+  let guard=0, got=0;
+  while(S.run>=S.nextMut && guard++<500){ S.mut++; S.mutRun++; got++; S.nextMut*=mutSpacing(); }
+  if(got && typeof onMutation==='function') onMutation(got);
+}
+
+// ---------- formatting ----------
+const SUF=['','K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','Dc'];
+function fmt(n){
+  if(!isFinite(n)) return '∞';
+  if(n<1000) return n<10 && n%1 ? n.toFixed(1) : Math.floor(n).toString();
+  const e=Math.floor(Math.log10(n)/3);
+  if(e<SUF.length){ const x=n/Math.pow(1000,e); return (x<10?x.toFixed(2):x<100?x.toFixed(1):Math.floor(x))+SUF[e]; }
+  return n.toExponential(2).replace('+','');
+}
+function fmtTime(s){ s=Math.floor(s); const h=Math.floor(s/3600),m=Math.floor(s%3600/60); return h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`; }
+
+// ---------- DOM ----------
+const $=id=>document.getElementById(id);
+const el={count:$('count'),countSub:$('countSub'),titer:$('titer'),vps:$('sVps'),mut:$('sMut'),gen:$('sGen'),alert:$('alert'),hint:$('hint')};
+const prodRows={}, traitRows={};
+function miniIcon(hue, kind){
+  const c=document.createElement('canvas'); c.width=56;c.height=56; const x=c.getContext('2d');
+  x.translate(28,28); x.strokeStyle=`hsl(${hue} 90% 65%)`; x.fillStyle=`hsla(${hue},90%,60%,.25)`; x.lineWidth=3;
+  x.shadowColor=`hsl(${hue} 90% 60%)`; x.shadowBlur=8;
+  x.beginPath();
+  const k=kind%4;
+  if(k===0){ for(let i=0;i<6;i++){const a=i/6*Math.PI*2; x.lineTo(Math.cos(a)*16,Math.sin(a)*16);} x.closePath(); }
+  else if(k===1){ x.arc(0,0,14,0,7); for(let i=0;i<8;i++){const a=i/8*Math.PI*2; x.moveTo(Math.cos(a)*14,Math.sin(a)*14); x.lineTo(Math.cos(a)*22,Math.sin(a)*22);} }
+  else if(k===2){ x.ellipse(0,0,20,10,0.6,0,7); }
+  else { x.roundRect ? x.roundRect(-16,-12,32,24,8) : x.rect(-16,-12,32,24); }
+  x.fill(); x.stroke(); return c;
+}
+function buildProducers(){
+  const list=$('prodList'); list.innerHTML='';
+  PRODUCERS.forEach((p,i)=>{
+    const b=document.createElement('button'); b.className='row'; b.id='prod-'+p.id;
+    const ico=document.createElement('div'); ico.className='ico'; ico.appendChild(miniIcon(p.hue,i));
+    const meta=document.createElement('div'); meta.className='meta';
+    meta.innerHTML=`<div class="n"><span>${p.name}</span><span class="lv"></span></div><div class="d"></div><div class="bar"><i></i></div>`;
+    const price=document.createElement('div'); price.className='price';
+    b.append(ico,meta,price); list.appendChild(b);
+    b.addEventListener('click',()=>buyProducer(p));
+    prodRows[p.id]={b,lv:meta.querySelector('.lv'),d:meta.querySelector('.d'),bar:meta.querySelector('.bar i'),price,name:meta.querySelector('.n span')};
+  });
+}
+function buildTraits(){
+  const wrap=$('traitList'); wrap.innerHTML='';
+  for(const br of ['trans','res','vir']){
+    const h=document.createElement('div'); h.className='branch '+BRANCH[br][0]; h.innerHTML=`<b>●</b> ${BRANCH[br][1]}`; wrap.appendChild(h);
+    const list=document.createElement('div'); list.className='list'; wrap.appendChild(list);
+    TRAITS.filter(t=>t.br===br).forEach(t=>{
+      const b=document.createElement('button'); b.className='row'; b.id='trait-'+t.id;
+      const hue = br==='trans'?345:br==='res'?228:42;
+      const ico=document.createElement('div'); ico.className='ico'; ico.appendChild(miniIcon(hue, TRAITS.indexOf(t)));
+      const meta=document.createElement('div'); meta.className='meta';
+      meta.innerHTML=`<div class="n"><span>${t.name}</span><span class="lv"></span></div><div class="d"></div>`;
+      const price=document.createElement('div'); price.className='price';
+      b.append(ico,meta,price); list.appendChild(b);
+      b.addEventListener('click',()=>buyTrait(t));
+      traitRows[t.id]={b,lv:meta.querySelector('.lv'),d:meta.querySelector('.d'),price};
+    });
+  }
+}
+function renderProducers(){
+  const gm=globalMult();
+  let revealed=false;
+  PRODUCERS.forEach((p,i)=>{
+    const r=prodRows[p.id], o=own(p.id);
+    const visible = i===0 || own(PRODUCERS[i-1].id)>0 || S.run>=p.base*0.5;
+    const locked = !visible && revealed; // show the next unknown one as a silhouette
+    if(!visible){ if(revealed){ r.b.hidden=true; return; } revealed=true; }
+    r.b.hidden=false;
+    const n=buyCount(p), c=costN(p,n), can=S.v>=c;
+    r.b.disabled=!can; r.b.classList.toggle('can',can); r.b.classList.toggle('locked',!visible);
+    r.name.textContent = visible? p.name : '???';
+    r.lv.textContent = o? `×${o}` : '';
+    const each = p.rate*Math.pow(2,Math.floor(o/25))*gm;
+    r.d.textContent = visible ? (o? `${fmt(prodOut(p)*gm)}/s total · ${p.desc}` : `${fmt(each)}/s each · ${p.desc}`) : 'Keep replicating to discover';
+    r.bar.style.width = ((o%25)/25*100)+'%';
+    r.price.innerHTML = `${fmt(c)}<small>${S.buy==='max'?'×'+n:'×'+n}</small>`;
+  });
+}
+function renderTraits(){
+  let any=false;
+  for(const t of TRAITS){
+    const r=traitRows[t.id], l=T(t.id), maxed=l>=t.max, c=traitCost(t), can=!maxed && S.mut>=c;
+    if(can) any=true;
+    r.b.disabled=!can; r.b.classList.toggle('can',can); r.b.classList.toggle('mx',maxed);
+    r.lv.textContent=`${l}/${t.max}`;
+    r.d.textContent=t.d(l);
+    r.price.innerHTML= maxed? 'fixed<small>in genome</small>' : `${c}<small>mutations</small>`;
+  }
+  $('evoDot').hidden=!any;
+}
+function renderSpec(){
+  const g=specGain();
+  $('spRun').textContent=fmt(S.run);
+  $('spGain').textContent='+'+g;
+  $('spNext').textContent=family(S.spec+1).name;
+  const btn=$('speBtn');
+  if(!btn.classList.contains('confirm')){ btn.disabled=g<=0; btn.textContent = g>0? `Speciate into ${family(S.spec+1).name}` : `Reach ${fmt(SPEC_REQ)} virions to speciate`; }
+  $('speDot').hidden = g<=0;
+  const lin=$('lineage'); let h='';
+  for(let i=0;i<Math.max(FAMILIES.length,S.spec+2);i++){
+    const cls = i<S.spec?'done':i===S.spec?'cur':'';
+    h+=`<span class="${cls}">${i<=S.spec+1?family(i).short:'?'}${i>=FAMILIES.length?' '+(Math.floor(i/FAMILIES.length)+1):''}</span>`;
+  }
+  lin.innerHTML=h;
+}
+function renderLog(){
+  const rows=[
+    ['Time in lab', fmtTime((Date.now()-S.started)/1000)],
+    ['Lifetime virions', fmt(S.life)],
+    ['Peak replication', fmt(S.best)+'/s'],
+    ['Taps', fmt(S.taps)],
+    ['Speciations', S.spec],
+    ['Mutations this strain', S.mutRun],
+    ['Next copy error at', fmt(S.nextMut)+' virions'],
+    ['Macrophages neutralized', S.kills],
+    ['Recombination events', S.events],
+  ];
+  $('logKv').innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+function renderTop(){
+  const r=vps();
+  el.vps.textContent=fmt(r);
+  el.mut.textContent=S.mut;
+  el.gen.textContent=S.genome;
+  const titer = S.v>0? Math.log10(S.v*1000).toFixed(1) : '—';
+  el.titer.textContent=`log₁₀ titer ${titer} PFU/mL`;
+  el.countSub.textContent = `virions · ${fmt(tapValue())} per tap`;
+  const f=family(S.spec);
+  $('famName').textContent=f.name; $('strainShort').textContent=f.short; $('strainCode').textContent=S.code+(S.spec?` · gen ${S.spec+1}`:'');
+  // alert line
+  if(immune){ el.alert.hidden=false; el.alert.className='alert immune'; el.alert.textContent=`Macrophage! −${Math.round((1-immunePenalty())*100)}% · tap it ${'●'.repeat(immune.hp)}`; }
+  else if(Date.now()<S.boostUntil){ el.alert.hidden=false; el.alert.className='alert boost'; el.alert.textContent=`Recombinant surge ×${S.boostMult} · ${Math.ceil((S.boostUntil-Date.now())/1000)}s`; }
+  else el.alert.hidden=true;
+  el.hint.hidden = S.taps>=5;
+  const dc=doseCost(), mb=$('mutagenBtn'); mb.disabled=S.v<dc; $('mutagenCost').textContent=fmt(dc)+' virions';
+}
+let tab='rep';
+function renderAll(){ renderTop(); if(tab==='rep') renderProducers(); renderTraits(); renderSpec(); if(tab==='log'){ renderLog(); renderGoals(); } }
+
+// ---------- actions ----------
+function buyProducer(p){
+  const n=buyCount(p), c=costN(p,n);
+  if(S.v<c) return;
+  S.v-=c; S.owned[p.id]=own(p.id)+n; pulse=Math.max(pulse,.5); blip(520,.06,'square',.025,1.4);
+  const rb=prodRows[p.id].b; rb.classList.remove('flash'); void rb.offsetWidth; rb.classList.add('flash');
+  renderAll();
+}
+function buyTrait(t){
+  const c=traitCost(t); if(T(t.id)>=t.max||S.mut<c) return;
+  S.mut-=c; S.traits[t.id]=T(t.id)+1; pulse=1; mutFx=Math.max(mutFx,.6); renderAll(); toast(`${t.name} → level ${T(t.id)}`);
+}
+let confirmTimer=null;
+$('speBtn').addEventListener('click',()=>{
+  const b=$('speBtn'), g=specGain(); if(g<=0) return;
+  if(!b.classList.contains('confirm')){
+    b.classList.add('confirm'); b.textContent=`Tap again to speciate (+${g} genome)`;
+    clearTimeout(confirmTimer); confirmTimer=setTimeout(()=>{b.classList.remove('confirm'); renderSpec();},3500); return;
+  }
+  clearTimeout(confirmTimer); b.classList.remove('confirm');
+  const keep={genome:S.genome+g,spec:S.spec+1,life:S.life,taps:S.taps,started:S.started,best:S.best,kills:S.kills,events:S.events,buy:S.buy,sound:S.sound,goals:S.goals,maxCombo:S.maxCombo};
+  S=Object.assign(fresh(),keep); immune=null; golden=null; particles.length=0; save();
+  setTab('rep'); renderAll(); speciateFx=1.5;
+  showModal(`<h3>New family: ${family(S.spec).name}</h3><p>Your strain ${S.code} carries ${S.genome} genome points: +${S.genome*10}% replication from the first copy.</p><button class="big-btn" id="mOk">Begin replicating</button>`);
+});
+$('wipeBtn').addEventListener('click',()=>{
+  const b=$('wipeBtn');
+  if(b.dataset.c!=='1'){ b.dataset.c='1'; b.textContent='Tap again to erase everything'; setTimeout(()=>{b.dataset.c='';b.textContent='Sterilize lab (erase save)';},3500); return; }
+  try{localStorage.removeItem(KEY);}catch(e){}
+  S=fresh(); immune=null; golden=null; b.dataset.c=''; b.textContent='Sterilize lab (erase save)'; renderAll(); toast('Lab sterilized. Fresh culture started.');
+});
+document.querySelectorAll('#buyMode button').forEach(b=>b.addEventListener('click',()=>{S.buy=b.dataset.m; syncBuy(); renderProducers();}));
+function syncBuy(){ document.querySelectorAll('#buyMode button').forEach(x=>x.setAttribute('aria-pressed', x.dataset.m===S.buy)); }
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
+function setTab(t){ tab=t; document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t)); ['rep','evo','spe','log'].forEach(k=>$('pane-'+k).hidden=k!==t); renderAll(); }
+
+let toastT=null;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2400); }
+function showModal(html){ $('modalCard').innerHTML=html; $('modal').hidden=false; const ok=$('mOk'); if(ok) ok.onclick=()=>$('modal').hidden=true; }
+
+// ---------- sound ----------
+let AC=null;
+function audio(){ if(!S.sound) return null; try{ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume(); }catch(e){ return null; } return AC; }
+function blip(freq,dur,type,vol,slide){ const a=audio(); if(!a) return; try{ const o=a.createOscillator(), g=a.createGain(), t0=a.currentTime;
+  o.type=type||'sine'; o.frequency.setValueAtTime(freq,t0); o.frequency.exponentialRampToValueAtTime(Math.max(20,freq*(slide||1)),t0+dur);
+  g.gain.setValueAtTime(vol||0.06,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0+dur+0.03); }catch(e){} }
+function chime(notes){ notes.forEach((f,i)=>setTimeout(()=>blip(f,.22,'sine',.05,1),i*70)); }
+function syncSound(){ const b=$('soundBtn'); b.textContent=S.sound?'♪ on':'♪ off'; b.setAttribute('aria-label',S.sound?'Sound on':'Sound off'); b.setAttribute('aria-pressed',S.sound); }
+$('soundBtn').addEventListener('click',()=>{ S.sound=!S.sound; syncSound(); if(S.sound) blip(440,.1,'sine',.06,1.5); });
+
+// ---------- tap frenzy ----------
+let combo=0, lastTapMs=0;
+function comboMult(){ return 1+combo/20; }
+
+// ---------- mutagen ----------
+function doseCost(){ return Math.max(60, (vps()/immunePenalty())*15)*Math.pow(1.3,S.dose); }
+$('mutagenBtn').addEventListener('click',()=>{ const c=doseCost(); if(S.v<c) return; S.v-=c; S.dose++; gainMut(1); pulse=1; renderAll(); });
+
+// ---------- goals ----------
+const GOALS=[
+  {id:'tap50',  n:'First contact',      d:'Tap the virus 50 times',               ok:()=>S.taps>=50, r:2},
+  {id:'ribo10', n:'Hijacker',           d:'Own 10 Ribosome Hijacks',              ok:()=>own('ribo')>=10, r:2},
+  {id:'vps10',  n:'Exponential phase',  d:'Reach 10 virions per second',          ok:()=>S.best>=10, r:3},
+  {id:'mut10',  n:'Sloppy copier',      d:'10 mutations in one strain',           ok:()=>S.mutRun>=10, r:3},
+  {id:'combo3', n:'Frenzy',             d:'Build a ×3 tap frenzy',                ok:()=>S.maxCombo>=3, r:3},
+  {id:'kill1',  n:'Immune escape',      d:'Neutralize a macrophage',              ok:()=>S.kills>=1, r:3},
+  {id:'gold1',  n:'Recombinant',        d:'Catch a recombination event',          ok:()=>S.events>=1, r:3},
+  {id:'vps1k',  n:'Outbreak',           d:'Reach 1K virions per second',          ok:()=>S.best>=1e3, r:5},
+  {id:'cap25',  n:'Mass assembly',      d:'Own 25 Capsid Foundries',              ok:()=>own('capsid')>=25, r:5},
+  {id:'mut50',  n:'Quasispecies',       d:'50 mutations in one strain',           ok:()=>S.mutRun>=50, r:6},
+  {id:'kill10', n:'Untouchable',        d:'Neutralize 10 macrophages',            ok:()=>S.kills>=10, r:6},
+  {id:'vps100k',n:'Epidemic',           d:'Reach 100K virions per second',        ok:()=>S.best>=1e5, r:8},
+  {id:'spec1',  n:'New branch',         d:'Speciate once',                        ok:()=>S.spec>=1, r:10},
+  {id:'allprod',n:'Full arsenal',       d:'Own every kind of machinery',          ok:()=>PRODUCERS.every(p=>own(p.id)>0), r:10},
+  {id:'vps10m', n:'Pandemic',           d:'Reach 10M virions per second',         ok:()=>S.best>=1e7, r:12},
+  {id:'spec3',  n:'Adaptive radiation', d:'Speciate 3 times',                     ok:()=>S.spec>=3, r:15},
+  {id:'life1t', n:'Biomass',            d:'1T lifetime virions',                  ok:()=>S.life>=1e12, r:15},
+  {id:'spec7',  n:'Tree of life',       d:'Reach the Xenovirus',                  ok:()=>S.spec>=7, r:30},
+];
+function checkGoals(){
+  for(const g of GOALS){ if(S.goals.includes(g.id) || !g.ok()) continue;
+    S.goals.push(g.id); gainMut(g.r); toast(`Goal reached: ${g.n} · +${g.r} mutations`); chime([659,880,1175,1568]); }
+}
+function renderGoals(){
+  const done=S.goals.length; $('goalSum').textContent=`${done} of ${GOALS.length} complete. Each goal pays out mutations once.`;
+  const order=[...GOALS.filter(g=>!S.goals.includes(g.id)),...GOALS.filter(g=>S.goals.includes(g.id))];
+  $('goalList').innerHTML=order.map(g=>{const d=S.goals.includes(g.id); return `<div class="goal${d?' done':''}"><span class="ck">${d?'✓':''}</span><div><div class="n">${g.n}</div><div class="d">${g.d}</div></div><span class="rw">+${g.r} mut</span></div>`;}).join('');
+}
+
+// ---------- canvas ----------
+const cv=$('dish'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1, cx=0, cy=0, R=60;
+function resize(){
+  const r=$('dishwrap').getBoundingClientRect(); DPR=Math.min(2.5,window.devicePixelRatio||1);
+  W=r.width; H=r.height; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); ctx.imageSmoothingQuality='high';
+  cx=W*(window.__iconCx||0.5); cy=H*(ICON?(window.__iconCy||0.5):0.58); R=Math.max(32,Math.min(W*0.2,H*0.17))*(window.__iconScale||1);
+}
+window.addEventListener('resize',resize);
+const cells=[]; for(let i=0;i<9;i++) cells.push({x:Math.random(),y:Math.random(),r:.12+Math.random()*.1,ph:Math.random()*6,sp:.02+Math.random()*.03});
+const particles=[], floats=[];
+let pulse=0, speciateFx=0, tNow=0, bounce=0, bounceV=0, mutFx=0, mutGene=-1, lastMutText=0, shownV=0;
+const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const spriteCache={};
+function sprite(h){
+  h=((Math.round(h/10)*10)%360+360)%360; let s=spriteCache[h]; if(s) return s;
+  s=document.createElement('canvas'); s.width=s.height=48; const x=s.getContext('2d');
+  const g=x.createRadialGradient(24,24,0,24,24,24);
+  g.addColorStop(0,`hsla(${h},100%,88%,1)`); g.addColorStop(.18,`hsla(${h},95%,64%,.9)`); g.addColorStop(.45,`hsla(${h},95%,55%,.25)`); g.addColorStop(1,`hsla(${h},95%,50%,0)`);
+  x.fillStyle=g; x.fillRect(0,0,48,48); return spriteCache[h]=s;
+}
+function emit(n,x,y,big){
+  const hue=P?P.hue:family(S.spec).hue;
+  for(let i=0;i<n && particles.length<320;i++){
+    const a=Math.random()*Math.PI*2, s=(big?200:90)+Math.random()*160;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,r:1.6+Math.random()*2.4,hue:hue+(Math.random()*40-20),sp:Math.random()*6});
+  }
+}
+function floatText(txt,x,y,color,big){ floats.push({txt,x,y,life:1,color,big:!!big}); if(floats.length>30) floats.shift(); }
+
+function hit(o,x,y,rad){ return o && Math.hypot(o.x-x,o.y-y)<rad; }
+cv.addEventListener('pointerdown',e=>{
+  const rc=cv.getBoundingClientRect(), x=e.clientX-rc.left, y=e.clientY-rc.top;
+  if(golden && hit(golden,x,y,34)){ claimGolden(); return; }
+  if(immune && hit(immune,x,y,immune.r+16)){
+    immune.hp--; immune.shake=1; emit(6,immune.x,immune.y); blip(120,.12,'sawtooth',.035,.6);
+    if(immune.hp<=0){ S.kills++; gainMut(1+Math.floor(S.spec/2)); floatText(`+${1+Math.floor(S.spec/2)} mutation`,immune.x,immune.y-20,'#43e6a0'); immune=null; toast('Macrophage neutralized'); }
+    renderTop(); return;
+  }
+  // tap = replicate
+  const nowMs=performance.now();
+  combo = (nowMs-lastTapMs<420) ? Math.min(40,combo+1) : Math.max(0,combo-4); lastTapMs=nowMs;
+  const cm=comboMult(); if(cm>S.maxCombo) S.maxCombo=cm;
+  let v=tapValue()*cm, crit=Math.random()<0.04*T('burst');
+  if(crit) v*=12;
+  crit ? (blip(150,.28,'triangle',.11,.35), blip(300,.2,'sine',.05,.5)) : blip(200+combo*14,.09,'sine',.08,.45);
+  earn(v); S.taps++; pulse=1;
+  emit(crit?22:5+Math.min(10,Math.floor(Math.log10(v+1))), cx, cy, crit);
+  floatText((crit?'BURST +':'+')+fmt(v), x+(Math.random()*70-35), y-10-Math.random()*20, crit?'#ffc34d':'#ffffff');
+  renderTop();
+});
+function claimGolden(){
+  const r=Math.random(), rate=vps()/immunePenalty()||0; S.events++;
+  if(r<0.4 || rate<1){ const amt=Math.max(rate*60, tapValue()*40); earn(amt); floatText('Recombination +'+fmt(amt),golden.x,golden.y,'#ffc34d'); toast(`Recombination: +${fmt(amt)} virions`); }
+  else if(r<0.7){ const m=2+Math.floor(S.spec/2)+Math.floor(Math.random()*3); gainMut(m); floatText(`+${m} mutations`,golden.x,golden.y,'#43e6a0'); toast(`Gene swap: +${m} mutations`); }
+  else { S.boostMult=7; S.boostUntil=Date.now()+30000; floatText('×7 SURGE',golden.x,golden.y,'#ffc34d'); toast('Recombinant surge: ×7 replication for 30s'); }
+  emit(30,golden.x,golden.y,true); golden=null; renderAll();
+}
+
+// ---------- phenotype: genes drive the shape ----------
+const GENES=[
+  {k:'len',  n:'Spike length',      h:345},
+  {k:'dens', n:'Spike density',     h:20},
+  {k:'tip',  n:'Spike tip',         h:45},
+  {k:'hue',  n:'Envelope pigment',  h:90},
+  {k:'fluid',n:'Membrane fluidity', h:150},
+  {k:'elong',n:'Capsid elongation', h:190},
+  {k:'facet',n:'Capsid facets',     h:220},
+  {k:'size', n:'Capsid size',       h:260},
+  {k:'coil', n:'Matrix proteins',   h:300},
+];
+const SHAPES={
+  phage: {size:.78,elong:0,   facet:1,square:0,bend:0,dens:5, len:.10,tip:.1, fluid:.05,tail:1,coil:.9},
+  icosa: {size:1,  elong:0,   facet:1,square:0,bend:0,dens:12,len:.14,tip:.1, fluid:.08,tail:0,coil:.6},
+  corona:{size:.88,elong:0,   facet:0,square:0,bend:0,dens:34,len:.30,tip:.5, fluid:.55,tail:0,coil:.5},
+  filo:  {size:.6, elong:1.35,facet:0,square:0,bend:1,dens:40,len:.12,tip:.1, fluid:.45,tail:0,coil:1.0},
+  pox:   {size:.92,elong:.28, facet:0,square:1,bend:0,dens:16,len:.08,tip:.85,fluid:.2, tail:0,coil:.4},
+};
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return h>>>0;}
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let driftCache={key:'',d:null,last:null};
+function drift(){
+  const key=S.code+'|'+S.spec+'|'+S.mutRun;
+  if(driftCache.key===key) return driftCache;
+  const r=mulberry(hashStr(S.code+'#'+S.spec)), d={}; GENES.forEach(g=>d[g.k]=0);
+  let last=null; const n=Math.min(S.mutRun,800);
+  for(let i=0;i<n;i++){ const gi=Math.floor(r()*GENES.length), s=r()<0.62?1:-1; d[GENES[gi].k]+=s*(0.5+r()*0.5); last={gi,s}; }
+  driftCache={key,d,last}; return driftCache;
+}
+const mt=x=>Math.tanh(x/7);
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function targetPheno(){
+  const f=family(S.spec), b=SHAPES[f.shape], d=drift().d;
+  return {
+    size:  clamp(b.size*(1+0.04*T('burst')+0.25*mt(d.size)),.45,1.3),
+    elong: clamp(b.elong+0.8*mt(d.elong),0,1.9),
+    facet: clamp(b.facet+0.9*mt(d.facet),0,1),
+    square:b.square, bend:b.bend, tail:b.tail,
+    dens:  clamp(b.dens+3*T('aero')+20*mt(d.dens), b.tail?3:6, 72),
+    len:   clamp(b.len+0.03*T('recep')+0.2*mt(d.len),.04,.65),
+    tip:   clamp(b.tip+0.7*mt(d.tip)+0.04*T('cyto'),0,1),
+    fluid: clamp(b.fluid+0.7*mt(d.fluid)+0.08*T('proof'),0,1.3),
+    hue:   f.hue+80*mt(d.hue)-6*T('range'),
+    hue2:  f.hue+160+25*T('drift'),
+    glow:  .5+.08*T('cyto')+.05*T('burst'),
+    coil:  clamp(b.coil+0.6*mt(d.coil)+0.06*T('lat'),.2,1.7),
+    vary:  .12*T('drift'),
+  };
+}
+let P=null;
+function stepPheno(dt){
+  const tg=targetPheno(); if(!P){P=Object.assign({},tg);return;}
+  const k=1-Math.exp(-dt*2.2);
+  for(const key in tg){
+    if(key==='hue'||key==='hue2'){ const dh=((tg[key]-P[key])%360+540)%360-180; P[key]+=dh*k; }
+    else P[key]+=(tg[key]-P[key])*k;
+  }
+}
+// low-discrepancy points on a sphere: any prefix is evenly spread, so spikes can grow in one by one
+function vdc(n){let v=0,d=1;n+=1;while(n){d*=2;v+=(n&1)/d;n>>=1;}return v;}
+const SPK=[]; for(let i=0;i<72;i++){ const z=1-2*vdc(i), r=Math.sqrt(Math.max(0,1-z*z)), ph=i*2.399963+0.7; SPK.push([Math.cos(ph)*r,Math.sin(ph)*r,z]); }
+function onMutation(n){
+  mutFx=1; const L=drift().last; if(!L) return; mutGene=L.gi;
+  if(tNow-lastMutText>0.7){ lastMutText=tNow; chime([523,784,1046]); floatText(`MUTATION · ${GENES[L.gi].n} ${L.s>0?'▲':'▼'}`, cx, cy-R*1.75, '#43e6a0', true); }
+}
+function gainMut(n){ S.mut+=n; S.mutRun+=n; onMutation(n); }
+
+// ---------- lifelike renderer: lit 3D bodies, protein-covered membranes, glossy spike trimers ----------
+const LIGHT=(()=>{const v=[-0.45,-0.6,0.66],l=Math.hypot(...v);return v.map(c=>c/l);})();
+const ballCache={};
+function ball(h,s,l){
+  const hb=((Math.round(h/8)*8)%360+360)%360, key=hb+'|'+s+'|'+l; let c=ballCache[key]; if(c) return c;
+  c=document.createElement('canvas'); c.width=c.height=64; const x=c.getContext('2d');
+  const g=x.createRadialGradient(23,21,1,32,32,31);
+  g.addColorStop(0,`hsl(${hb} ${Math.round(s*0.5)}% ${Math.min(97,l+40)}%)`);
+  g.addColorStop(.22,`hsl(${hb} ${s}% ${Math.min(90,l+14)}%)`);
+  g.addColorStop(.65,`hsl(${hb} ${s}% ${l-6}%)`);
+  g.addColorStop(.93,`hsl(${hb} ${s}% ${Math.max(4,l-26)}%)`);
+  g.addColorStop(1,`hsla(${hb},${s}%,${Math.max(2,l-30)}%,0)`);
+  x.fillStyle=g; x.beginPath(); x.arc(32,32,31,0,7); x.fill(); return ballCache[key]=c;
+}
+const PHI=(1+Math.sqrt(5))/2;
+const IV=[[-1,PHI,0],[1,PHI,0],[-1,-PHI,0],[1,-PHI,0],[0,-1,PHI],[0,1,PHI],[0,-1,-PHI],[0,1,-PHI],[PHI,0,-1],[PHI,0,1],[-PHI,0,-1],[-PHI,0,1]].map(v=>{const l=Math.hypot(...v);return v.map(c=>c/l);});
+const IF=[[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],[1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],[3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],[4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+const SURF=[]; for(let i=0;i<260;i++){ const z=1-2*vdc(i+100), r=Math.sqrt(Math.max(0,1-z*z)), ph=i*2.399963+1.9; SURF.push([Math.cos(ph)*r,Math.sin(ph)*r,z]); }
+let RX=null; // current rotation
+function rot(v){ const [cyw,syw,cp,sp]=RX; const x=v[0]*cyw+v[2]*syw, z=-v[0]*syw+v[2]*cyw, y=v[1]; return [x,y*cp-z*sp,y*sp+z*cp]; }
+function outline(a,t){
+  const p=P, c=Math.cos(a), s=Math.sin(a); let r=1;
+  if(p.square>0.01){ const e=2+p.square*3, se=Math.pow(Math.pow(Math.abs(c),e)+Math.pow(Math.abs(s),e),-1/e); r=r*(1-p.square)+se*p.square; }
+  r*=1+p.fluid*0.035*(Math.sin(a*3+t*1.7)+0.6*Math.sin(a*5-t*2.3)+0.3*Math.sin(a*8+t*3.1));
+  let x=c*r*(1+p.elong*1.4), y=s*r/(1+p.elong*0.35);
+  if(p.bend>0.01) y+=p.bend*0.3*Math.sin(x*1.5+t*1.3);
+  return [x,y];
+}
+// project a unit-sphere direction onto the (possibly stretched, bent, boxy) body surface
+function surf(v,t,Rb,k){ const a=Math.atan2(v[1],v[0]), q=outline(a,t), rxy=Math.hypot(v[0],v[1]); return [q[0]*Rb*rxy*k, q[1]*Rb*rxy*k]; }
+function tracePath(pts){
+  const n=pts.length; ctx.beginPath();
+  ctx.moveTo((pts[n-1][0]+pts[0][0])/2,(pts[n-1][1]+pts[0][1])/2);
+  for(let i=0;i<n;i++){ const a=pts[i], b=pts[(i+1)%n]; ctx.quadraticCurveTo(a[0],a[1],(a[0]+b[0])/2,(a[1]+b[1])/2); }
+  ctx.closePath();
+}
+function drawSpikes(list,Rb,t,isBack,shrink){
+  const p=P, w0=Math.max(1.6,Rb*0.04), mf=mutFx, sh=p.hue, ss=72;
+  for(const s of list){
+    const depth=(s.z+1)/2;
+    const b=surf(s.v,t,Rb,shrink);
+    const L=1+p.len*1.7*s.g*(1+0.3*mf*Math.sin(s.i+t*18));
+    const tx=b[0]*L, ty=b[1]*L;
+    const hh=sh+p.vary*60*Math.sin(s.i*2.3);
+    const lit=isBack?30:40+depth*14;
+    const w=w0*(0.7+0.4*depth)*(0.55+0.45*s.g);
+    ctx.globalAlpha=isBack?0.75:1;
+    // stalk: dark core + light edge toward the light = a little cylinder
+    ctx.lineCap='round';
+    ctx.strokeStyle=`hsl(${hh} ${ss-20}% ${lit-14}%)`; ctx.lineWidth=w;
+    ctx.beginPath(); ctx.moveTo(b[0],b[1]); ctx.lineTo(tx,ty); ctx.stroke();
+    ctx.strokeStyle=`hsla(${hh},${ss}%,${lit+22}%,.8)`; ctx.lineWidth=w*0.35;
+    ctx.beginPath(); ctx.moveTo(b[0]-w*0.2,b[1]-w*0.25); ctx.lineTo(tx-w*0.2,ty-w*0.25); ctx.stroke();
+    // head: knob, trimer club, or forked fibre
+    const ang=Math.atan2(ty-b[1],tx-b[0]), tr=w*(1.15+p.tip*0.8)*(0.55+0.45*s.g), spr=ball(hh,ss,lit);
+    if(p.tip<0.36){ const d=tr*2.3; ctx.drawImage(spr,tx-d/2,ty-d/2,d,d); }
+    else if(p.tip<0.72){
+      const d=tr*1.75, px=-Math.sin(ang), py=Math.cos(ang), spin=t*0.8+s.i;
+      for(let k=0;k<3;k++){ const o=Math.cos(spin+k*2.094)*tr*0.55, f=Math.sin(spin+k*2.094)*tr*0.25;
+        const hx=tx+px*o+Math.cos(ang)*(tr*0.35+f), hy=ty+py*o+Math.sin(ang)*(tr*0.35+f); ctx.drawImage(spr,hx-d/2,hy-d/2,d,d); }
+    } else {
+      const fl=tr*2.3; ctx.lineWidth=w*0.8; ctx.strokeStyle=`hsl(${hh} ${ss-10}% ${lit}%)`;
+      for(const sg of [-0.6,0.6]){ const ex=tx+Math.cos(ang+sg)*fl, ey=ty+Math.sin(ang+sg)*fl; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(ex,ey); ctx.stroke(); const d=w*2; ctx.drawImage(spr,ex-d/2,ey-d/2,d,d); }
+    }
+    ctx.globalAlpha=1;
+  }
+}
+function drawIcosa(Rb,t,alpha,bodyH,bodyS,bodyL){
+  if(alpha<=0.01) return;
+  const p=P, ex=1+p.elong*1.4, ey=1/(1+p.elong*0.35), k=Rb*1.04;
+  const V=IV.map(rot), pr=v=>[v[0]*k*ex, v[1]*k*ey];
+  const faces=[];
+  for(const f of IF){ const a=V[f[0]],b=V[f[1]],c=V[f[2]]; const n=[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3]; if(n[2]<=0) continue;
+    const nl=Math.hypot(...n), d=(n[0]*LIGHT[0]+n[1]*LIGHT[1]+n[2]*LIGHT[2])/nl; faces.push({f,n,z:n[2],sh:Math.max(0,d)}); }
+  faces.sort((a,b)=>a.z-b.z);
+  ctx.save(); ctx.globalAlpha=alpha; ctx.lineJoin='round';
+  for(const F of faces){
+    const a=pr(V[F.f[0]]), b=pr(V[F.f[1]]), c=pr(V[F.f[2]]);
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(c[0],c[1]); ctx.closePath();
+    const L=bodyL-22+F.sh*44;
+    const g=ctx.createLinearGradient(a[0],a[1],(b[0]+c[0])/2,(b[1]+c[1])/2);
+    g.addColorStop(0,`hsl(${bodyH} ${bodyS}% ${L+6}%)`); g.addColorStop(1,`hsl(${bodyH} ${bodyS}% ${L-6}%)`);
+    ctx.fillStyle=g; ctx.fill();
+    ctx.strokeStyle=`hsla(${bodyH},${bodyS}%,${Math.min(92,L+22)}%,.55)`; ctx.lineWidth=1.2; ctx.stroke();
+    // capsomeres: hexamer bumps on each face
+    const cx3=(a[0]+b[0]+c[0])/3, cy3=(a[1]+b[1]+c[1])/3, d=Rb*0.17*(0.6+0.4*F.z/ (Math.hypot(...F.n)||1));
+    const spr=ball(bodyH,bodyS+6,Math.round(L/4)*4);
+    ctx.drawImage(spr,cx3-d/2,cy3-d/2,d,d);
+    for(const q of [a,b,c]){ const mx=cx3+(q[0]-cx3)*0.52, my=cy3+(q[1]-cy3)*0.52, dd=d*0.62; ctx.drawImage(spr,mx-dd/2,my-dd/2,dd,dd); }
+  }
+  // pentamers at front vertices
+  V.forEach((v,i)=>{ if(v[2]<0.15) return; const q=pr(v), d=Rb*0.15*(0.5+0.5*v[2]); ctx.drawImage(ball(bodyH+20,bodyS+12,bodyL+6),q[0]-d/2,q[1]-d/2,d,d); });
+  ctx.restore();
+}
+function drawVirus(t){
+  const p=P, Rb=R*p.size, mf=mutFx, ex=1+p.elong*1.4;
+  const bodyH=p.hue+200*0+22, bodyS=34, bodyL=44;
+  const ia=clamp((p.facet-0.35)/0.4,0,1)*(1-clamp(p.square*1.5,0,1))*(1-clamp(p.elong-0.4,0,1)); // how icosahedral
+  const shrink=1-0.16*ia;
+  const sx=1+bounce*0.08, sy=1-bounce*0.05, oy=-p.tail*Rb*0.62;
+  const yaw=reduced?0.6:t*0.3, pitch=(p.tail>0.5?0.18:0.42)+(reduced?0:Math.sin(t*0.23)*0.14);
+  RX=[Math.cos(yaw),Math.sin(yaw),Math.cos(pitch),Math.sin(pitch)];
+  ctx.save(); ctx.translate(cx,cy+oy); ctx.scale(sx,sy);
+  // soft fluorescent halo
+  ctx.globalCompositeOperation='lighter';
+  const hr=Rb*(2.3+p.elong*0.8), halo=ctx.createRadialGradient(0,0,Rb*0.5,0,0,hr);
+  halo.addColorStop(0,`hsla(${p.hue},95%,55%,${0.16*p.glow+0.3*mf})`); halo.addColorStop(1,'hsla(0,0%,0%,0)');
+  ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(0,0,hr,0,7); ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+  // contact shadow on the dish
+  ctx.save(); ctx.globalAlpha=0.35; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(Rb*0.15,Rb*(1.25+p.tail*1.6),Rb*0.9*ex,Rb*0.18,0,0,7); ctx.filter='blur(8px)'; ctx.fill(); ctx.restore();
+  // spikes split by depth
+  const back=[], front=[], nmax=Math.min(SPK.length,Math.ceil(p.dens));
+  for(let i=0;i<nmax;i++){ const g=Math.min(1,p.dens-i); if(g<=0) break; const v=rot(SPK[i]);
+    if(p.tail>0.5 && v[1]>0.55) continue; (v[2]<0?back:front).push({v,z:v[2],g,i}); }
+  back.sort((a,b)=>a.z-b.z); front.sort((a,b)=>a.z-b.z);
+  if(p.tail>0.01) drawTail(Rb,t);
+  drawSpikes(back,Rb,t,true,shrink);
+  // body silhouette
+  const N=128, pts=new Array(N);
+  for(let i=0;i<N;i++){ const q=outline(i/N*Math.PI*2,t); pts[i]=[q[0]*Rb*shrink,q[1]*Rb*shrink]; }
+  const lx=-Rb*0.38*ex, ly=-Rb*0.42;
+  const g=ctx.createRadialGradient(lx,ly,Rb*0.05,0,0,Rb*1.08*Math.max(1,ex*0.8));
+  g.addColorStop(0,`hsl(${bodyH} ${bodyS}% ${bodyL+30+mf*14}%)`);
+  g.addColorStop(.5,`hsl(${bodyH} ${bodyS}% ${bodyL}%)`);
+  g.addColorStop(.88,`hsl(${bodyH} ${bodyS+6}% ${bodyL-22}%)`);
+  g.addColorStop(1,`hsl(${bodyH} ${bodyS+10}% ${bodyL-30}%)`);
+  tracePath(pts); ctx.fillStyle=g; ctx.fill();
+  if(p.elong>0.5){ const lg=ctx.createLinearGradient(0,-Rb*0.7,0,Rb*0.7); lg.addColorStop(0,'rgba(255,255,255,.14)'); lg.addColorStop(.5,'rgba(0,0,0,0)'); lg.addColorStop(1,'rgba(0,0,0,.35)'); tracePath(pts); ctx.fillStyle=lg; ctx.fill(); }
+  // membrane proteins / lipid texture
+  ctx.save(); tracePath(pts); ctx.clip();
+  const nb=Math.round((110+p.coil*90)*(1-ia));
+  for(let i=0;i<nb && i<SURF.length;i++){ const v=rot(SURF[i]); if(v[2]<0.02) continue;
+    const q=surf(v,t,Rb,shrink*0.97), sh=Math.max(0,v[0]*LIGHT[0]+v[1]*LIGHT[1]+v[2]*LIGHT[2]);
+    const d=Rb*0.085*(0.45+0.55*v[2])*(1+0.35*p.fluid*Math.sin(i*1.7+t));
+    ctx.globalAlpha=0.35+0.55*v[2]; ctx.drawImage(ball(bodyH+(i%3)*10,bodyS+10,Math.round((bodyL-14+sh*30)/4)*4),q[0]-d/2,q[1]-d/2,d,d); }
+  ctx.globalAlpha=1;
+  if(p.square>0.2){ // poxvirus surface tubules
+    ctx.lineCap='round';
+    for(let i=0;i<26;i++){ const x=(((i*37)%19)/19-0.5)*Rb*2.0, y=(((i*53)%13)/13-0.5)*Rb*1.25, wv=Math.sin(t*1.5+i)*2, a=(i*0.7)%3;
+      ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+      ctx.strokeStyle=`hsla(${bodyH},${bodyS}%,${bodyL-24}%,${0.7*p.square})`; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-8,1); ctx.quadraticCurveTo(0,-6+wv,8,1); ctx.stroke();
+      ctx.strokeStyle=`hsla(${bodyH},${bodyS}%,${bodyL+24}%,${0.7*p.square})`; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(-8,0); ctx.quadraticCurveTo(0,-7+wv,8,0); ctx.stroke(); ctx.restore(); }
+  }
+  ctx.restore();
+  // fluorescent rim light + dark edge
+  tracePath(pts); ctx.lineJoin='round';
+  ctx.strokeStyle='rgba(0,0,0,.45)'; ctx.lineWidth=2; ctx.stroke();
+  ctx.globalCompositeOperation='lighter';
+  ctx.strokeStyle=`hsla(${p.hue},95%,62%,${0.28+mf*0.4})`; ctx.lineWidth=3.5; ctx.stroke();
+  if(mf>0.02){
+    ctx.save(); ctx.translate(4*mf,0); tracePath(pts); ctx.strokeStyle=`rgba(255,60,140,${0.6*mf})`; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+    ctx.save(); ctx.translate(-4*mf,0); tracePath(pts); ctx.strokeStyle=`rgba(60,220,255,${0.6*mf})`; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+  }
+  ctx.globalCompositeOperation='source-over';
+  drawIcosa(Rb,t,ia,bodyH,bodyS,bodyL);
+  drawSpikes(front,Rb,t,false,shrink);
+  ctx.restore();
+  if(mf>0.01){
+    for(let k=0;k<2;k++){ const ph=Math.min(1,(1-mf)*1.3-k*0.25); if(ph<=0) continue;
+      ctx.beginPath(); ctx.arc(cx,cy+oy,Rb*(1.3+ph*2.6),0,7); ctx.strokeStyle=`hsla(${p.hue2},95%,65%,${(1-ph)*0.7})`; ctx.lineWidth=2.5*(1-ph)+0.5; ctx.stroke(); }
+  }
+}
+function drawTail(Rb,t){
+  const p=P, al=p.tail, hue=p.hue+22;
+  ctx.save(); ctx.globalAlpha=al;
+  const top=Rb*0.9, contract=1-0.3*Math.max(0,bounce), L=Rb*1.1*contract, w=Rb*0.22*(1+0.18*Math.max(0,bounce));
+  const cyl=(x0,w)=>{ const g=ctx.createLinearGradient(x0-w/2,0,x0+w/2,0); g.addColorStop(0,`hsl(${hue} 30% 18%)`); g.addColorStop(.32,`hsl(${hue} 34% 62%)`); g.addColorStop(.6,`hsl(${hue} 32% 40%)`); g.addColorStop(1,`hsl(${hue} 30% 14%)`); return g; };
+  ctx.fillStyle=cyl(0,w*1.6); ctx.beginPath(); ctx.ellipse(0,top+Rb*0.04,w*0.8,Rb*0.07,0,0,7); ctx.fill();
+  const y0=top+Rb*0.08;
+  ctx.fillStyle=cyl(0,w); ctx.fillRect(-w/2,y0,w,L);
+  for(let k=0;k<9;k++){ const y=y0+(k+0.5)*L/9; ctx.fillStyle=cyl(0,w*1.12); ctx.beginPath(); ctx.ellipse(0,y,w*0.56,L/22,0,0,7); ctx.fill(); }
+  const by=y0+L; ctx.fillStyle=cyl(0,Rb*0.7); ctx.beginPath(); ctx.ellipse(0,by,Rb*0.35,Rb*0.07,0,0,7); ctx.fill();
+  const legs=6, fl=Rb*(0.75+0.4*p.len);
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  for(let i=0;i<legs;i++){
+    const s=(i/(legs-1))*2-1, ph=reduced?0:Math.sin(t*2.2+i*0.9)*0.12, d=0.55+0.45*Math.abs(Math.cos(i*1.7+t*0.35));
+    const kx=s*fl*0.85, ky=by-Rb*0.15+ph*Rb, fx=s*fl*1.05, fy=by+Rb*0.55+Math.abs(s)*Rb*0.05;
+    ctx.globalAlpha=al*(0.55+0.45*d);
+    ctx.strokeStyle=`hsl(${hue} 30% 16%)`; ctx.lineWidth=3.6; ctx.beginPath(); ctx.moveTo(s*Rb*0.28,by); ctx.quadraticCurveTo(kx,ky,fx,fy); ctx.stroke();
+    ctx.strokeStyle=`hsl(${hue} 40% 62%)`; ctx.lineWidth=1.3; ctx.beginPath(); ctx.moveTo(s*Rb*0.28,by-1); ctx.quadraticCurveTo(kx,ky-1,fx,fy-1); ctx.stroke();
+    const dd=7; ctx.drawImage(ball(hue,40,50),fx-dd/2,fy-dd/2,dd,dd);
+  }
+  ctx.restore();
+}
+function drawCells(t, infected){
+  for(let i=0;i<cells.length;i++){
+    const c=cells[i], x=c.x*W+Math.sin(t*c.sp+c.ph)*20, y=c.y*H+Math.cos(t*c.sp*0.8+c.ph)*16, r=c.r*Math.min(W,H)*0.95;
+    const inf = i < Math.round(infected*cells.length);
+    const g=ctx.createRadialGradient(x-r*0.2,y-r*0.2,r*0.1,x,y,r);
+    g.addColorStop(0, inf?'rgba(255,90,134,.07)':'rgba(67,230,160,.05)'); g.addColorStop(1, inf?'rgba(255,90,134,.015)':'rgba(67,230,160,.01)');
+    ctx.beginPath(); ctx.ellipse(x,y,r,r*0.82,c.ph,0,7); ctx.fillStyle=g; ctx.fill();
+    ctx.strokeStyle = inf? 'rgba(255,90,134,.15)':'rgba(67,230,160,.09)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x+r*0.15,y-r*0.1,r*0.3,r*0.26,c.ph,0,7); ctx.fillStyle='rgba(123,147,255,.08)'; ctx.fill();
+    if(inf && !reduced){ for(let k=0;k<4;k++){ const a=t*0.3+k*1.57+i, bx=x+Math.cos(a)*r*0.95, by=y+Math.sin(a)*r*0.78; ctx.globalAlpha=.5; ctx.drawImage(sprite(P?P.hue:340),bx-6,by-6,12,12); ctx.globalAlpha=1; } }
+  }
+}
+function drawGenomeTrack(){
+  const d=drift().d, bw=7, gap=4, hgt=26, x0=W-Math.max(14,0)-GENES.length*(bw+gap)+gap-2, y0=58;
+  ctx.font='500 9px "IBM Plex Mono", monospace'; ctx.textAlign='right'; ctx.fillStyle='rgba(138,147,182,.8)';
+  ctx.fillText('GENOME DRIFT', W-16, y0+hgt+14);
+  for(let i=0;i<GENES.length;i++){
+    const v=mt(d[GENES[i].k]), x=x0+i*(bw+gap)-14, mid=y0+hgt/2, hot=i===mutGene?mutFx:0;
+    ctx.fillStyle='rgba(34,43,74,.9)'; ctx.fillRect(x,y0,bw,hgt);
+    ctx.fillStyle=`hsla(${GENES[i].h},90%,${60+hot*30}%,${0.85})`;
+    const h=v*hgt/2; ctx.fillRect(x,h>0?mid-h:mid,bw,Math.max(1,Math.abs(h)));
+    if(hot>0.02){ ctx.globalCompositeOperation='lighter'; ctx.drawImage(sprite(GENES[i].h),x+bw/2-14,mid-14,28,28); ctx.globalCompositeOperation='source-over'; }
+  }
+}
+function drawImmune(t){
+  if(!immune) return;
+  const sh=immune.shake>0?(Math.random()-0.5)*8*immune.shake:0;
+  ctx.save(); ctx.translate(immune.x+sh,immune.y);
+  ctx.shadowColor='#7b93ff'; ctx.shadowBlur=20;
+  ctx.beginPath();
+  for(let i=0;i<=24;i++){ const a=i/24*Math.PI*2, rr=immune.r*(1+0.18*Math.sin(a*5+t*3)); ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); }
+  ctx.closePath(); ctx.fillStyle='rgba(123,147,255,.2)'; ctx.fill(); ctx.strokeStyle='#a9b8ff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(-immune.r*0.2,0,immune.r*0.35,0,7); ctx.fillStyle='rgba(123,147,255,.45)'; ctx.fill();
+  ctx.restore();
+  ctx.font='600 11px "IBM Plex Mono", monospace'; ctx.fillStyle='#a9b8ff'; ctx.textAlign='center';
+  ctx.fillText('●'.repeat(immune.hp)+'○'.repeat(5-immune.hp), immune.x, immune.y+immune.r+18);
+}
+function drawGolden(t){
+  if(!golden) return;
+  ctx.save(); ctx.translate(golden.x,golden.y); ctx.rotate(t*1.5);
+  ctx.shadowColor='#ffc34d'; ctx.shadowBlur=24; ctx.strokeStyle='#ffd27a'; ctx.lineWidth=2.5;
+  // double helix motif
+  for(let s=0;s<2;s++){ ctx.beginPath(); for(let i=0;i<=20;i++){const u=i/20; ctx.lineTo((u-0.5)*36, Math.sin(u*Math.PI*2+s*Math.PI)*8);} ctx.stroke(); }
+  ctx.globalAlpha=.6; for(let i=0;i<6;i++){const u=(i+0.5)/6; ctx.beginPath(); ctx.moveTo((u-0.5)*36,Math.sin(u*Math.PI*2)*8); ctx.lineTo((u-0.5)*36,Math.sin(u*Math.PI*2+Math.PI)*8); ctx.stroke();}
+  ctx.restore();
+}
+let lastFrame=performance.now(), emitAcc=0;
+function frame(now){
+  const dt=Math.min(0.05,(now-lastFrame)/1000); lastFrame=now; tNow+=dt;
+  stepPheno(dt);
+  if(pulse>0){ bounceV+=pulse*7; pulse=0; }
+  bounceV+=(-170*bounce-11*bounceV)*dt; bounce+=bounceV*dt;
+  mutFx=Math.max(0,mutFx-dt*0.8);
+  if(performance.now()-lastTapMs>650 && combo>0) combo=Math.max(0,combo-dt*14);
+  const cmb=$('combo'); if(combo>=1){ cmb.hidden=false; $('comboTxt').textContent=`×${comboMult().toFixed(1)} frenzy`; $('comboBar').style.width=(combo/40*100)+'%'; } else cmb.hidden=true;
+  shownV+=(S.v-shownV)*(1-Math.exp(-dt*14)); if(Math.abs(S.v-shownV)<0.5||!isFinite(shownV)) shownV=S.v;
+  el.count.textContent=fmt(shownV);
+  ctx.clearRect(0,0,W,H);
+  const r=vps();
+  if(!window.__iconTransparent) drawCells(tNow, Math.min(1, Math.log10(r+1)/9));
+  emitAcc += dt*Math.min(14, Math.log10(r+1)*1.6);
+  while(emitAcc>1){ emitAcc--; if(!ICON) emit(1,cx,cy-(P?P.tail:0)*R*0.5,false); }
+  if(speciateFx>0){ speciateFx-=dt; ctx.beginPath(); ctx.arc(cx,cy,R*(1+(1.5-speciateFx)*4),0,7); ctx.strokeStyle=`rgba(255,195,77,${Math.max(0,speciateFx/1.5)})`; ctx.lineWidth=3; ctx.stroke(); }
+  // particles (additive glow sprites)
+  ctx.globalCompositeOperation='lighter';
+  const drag=Math.exp(-dt*2.2);
+  for(let i=particles.length-1;i>=0;i--){ const p=particles[i];
+    p.vx*=drag; p.vy*=drag; p.vx+=Math.sin(tNow*2+p.sp)*8*dt; p.vy+=Math.cos(tNow*1.7+p.sp)*8*dt;
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt*0.45;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    const s=p.r*5*(0.6+0.4*p.life); ctx.globalAlpha=Math.min(1,p.life*1.4); ctx.drawImage(sprite(p.hue),p.x-s/2,p.y-s/2,s,s); }
+  ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+  drawVirus(tNow);
+  if(immune){ immune.t+=dt; const dx=cx-immune.x, dy=cy-immune.y, d=Math.hypot(dx,dy);
+    if(d>R*1.8){ immune.x+=dx/d*28*dt; immune.y+=dy/d*28*dt; } else { immune.x+=Math.cos(tNow)*10*dt; immune.y+=Math.sin(tNow*1.3)*10*dt; }
+    immune.shake=Math.max(0,immune.shake-dt*4);
+    if(immune.t>25){ immune=null; toast('The macrophage moved on'); }
+  }
+  drawImmune(tNow);
+  if(golden){ golden.t+=dt; golden.x+=golden.vx*dt; golden.y+=golden.vy*dt; if(golden.x<30||golden.x>W-30) golden.vx*=-1; if(golden.y<60||golden.y>H-30) golden.vy*=-1; if(golden.t>14) golden=null; }
+  drawGolden(tNow);
+  if(!ICON) drawGenomeTrack();
+  ctx.textAlign='center';
+  for(let i=floats.length-1;i>=0;i--){ const f=floats[i]; f.life-=dt*(f.big?0.55:0.9); if(f.life<=0){floats.splice(i,1);continue;}
+    const e=1-f.life, rise=(1-Math.pow(1-e,3))*(f.big?40:60), pop=f.big?1:1+0.25*Math.max(0,1-e*6);
+    ctx.globalAlpha=Math.min(1,f.life*2); ctx.font=`600 ${Math.round((f.big?12:14)*pop)}px "IBM Plex Mono", monospace`; ctx.fillStyle=f.color;
+    ctx.fillText(f.txt,f.x,f.y-rise); }
+  ctx.globalAlpha=1;
+  requestAnimationFrame(frame);
+}
+
+// ---------- loop ----------
+let immuneTimer=40+Math.random()*30, goldTimer=25+Math.random()*30, saveAcc=0, uiAcc=0, lastTick=Date.now();
+function tick(){
+  const now=Date.now(), dt=Math.min(5,(now-lastTick)/1000); lastTick=now;
+  const r=vps(); if(r>0) earn(r*dt); if(r>S.best) S.best=r;
+  const started = S.run>200;
+  if(started && !immune){ immuneTimer-=dt; if(immuneTimer<=0){ spawnImmune(); immuneTimer=45+Math.random()*45; } }
+  if(started && !golden){ goldTimer-=dt*(1+0.2*T('host2')); if(goldTimer<=0){ spawnGolden(); goldTimer=40+Math.random()*50; } }
+  uiAcc+=dt; if(uiAcc>=0.25){ uiAcc=0; checkGoals(); renderAll(); } else renderTop();
+  saveAcc+=dt; if(saveAcc>=5){ saveAcc=0; save(); }
+}
+function spawnImmune(){
+  const side=Math.random()<0.5?-1:1;
+  immune={x:side<0?-30:W+30,y:H*(0.3+Math.random()*0.5),r:Math.max(22,R*0.45),hp:5,t:0,shake:0};
+}
+function spawnGolden(){ golden={x:40+Math.random()*(W-80),y:70+Math.random()*(H-110),vx:(Math.random()-0.5)*60,vy:(Math.random()-0.5)*50,t:0}; }
+
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) save(); else { applyOffline(); } });
+window.addEventListener('pagehide',save);
+function applyOffline(){
+  const away=(Date.now()-S.last)/1000; if(away<30) { S.last=Date.now(); return; }
+  const secs=Math.min(away, 8*3600), rate=0.25+0.15*T('lat');
+  const saveImm=immune; immune=null; const r=vps(); immune=saveImm;
+  const gain=r*secs*rate; S.last=Date.now(); lastTick=Date.now();
+  if(gain>=1){ earn(gain); showModal(`<h3>While you were latent</h3><p>Your strain kept copying itself for ${fmtTime(secs)} at ${Math.round(rate*100)}% speed.</p><div class="gain">+${fmt(gain)}</div><p>virions</p><button class="big-btn" id="mOk">Resume replication</button>`); }
+}
+
+function start(seed){
+  load(seed);
+  buildProducers(); buildTraits(); syncBuy(); syncSound(); resize();
+  if(!(seed && seed.S)) applyOffline();
+  lastTick=Date.now();
+  renderAll();
+  requestAnimationFrame(frame);
+  setInterval(tick,100);
+}
+window.__vlSave=save; window.__vlResume=applyOffline;
+if(hot && hot.ready) hot.ready(start); else start(hot && hot.data ? hot.data : null);
+})();
+</script>
