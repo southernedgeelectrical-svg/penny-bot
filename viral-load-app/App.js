@@ -1,14 +1,24 @@
 import { useEffect, useRef } from 'react';
-import { AppState, StyleSheet } from 'react-native';
+import { AppState, BackHandler, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Haptics from 'expo-haptics';
 import gameHtml from './src/gameHtml';
 
 const BG = '#060912';
 // A fixed https origin gives the game a stable localStorage, so saves survive app restarts.
 const ORIGIN = 'https://viralload.app/';
+
+const HAPTICS = {
+  light: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+  medium: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
+  heavy: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy),
+  rigid: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid),
+  select: () => Haptics.selectionAsync(),
+  success: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+};
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -24,8 +34,20 @@ export default function App() {
         web.current.injectJavaScript('window.__vlSave && window.__vlSave(); true;');
       }
     });
-    return () => sub.remove();
+    // Back closes popups / returns to the main tab first; the game asks to exit when there's nothing left to close.
+    const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      web.current?.injectJavaScript('window.__vlBack && window.__vlBack(); true;');
+      return true;
+    });
+    return () => { sub.remove(); back.remove(); };
   }, []);
+
+  const onMessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
+    if (msg.t === 'haptic' && HAPTICS[msg.k]) HAPTICS[msg.k]().catch(() => {});
+    else if (msg.t === 'exit') { web.current?.injectJavaScript('window.__vlSave && window.__vlSave(); true;'); BackHandler.exitApp(); }
+  };
 
   return (
     <SafeAreaProvider>
@@ -46,6 +68,7 @@ export default function App() {
           setSupportMultipleWindows={false}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
+          onMessage={onMessage}
           onLoadEnd={() => SplashScreen.hideAsync().catch(() => {})}
           containerStyle={styles.web}
         />

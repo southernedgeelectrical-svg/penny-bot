@@ -39,7 +39,7 @@ button:focus-visible{outline:2px solid var(--dapi);outline-offset:2px}
 .stat .v{font-family:var(--f-mono);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .stat.mut .v{color:var(--gfp)} .stat.gen .v{color:var(--amber)}
 /* dish */
-.dishwrap{position:relative;min-height:0;overflow:hidden;background:radial-gradient(circle at 50% 55%, #1c0a14 0%, #0a060c 60%, var(--bg) 100%)}
+.dishwrap{position:relative;min-height:0;overflow:hidden;background:radial-gradient(circle at 50% 52%, #3b1d38 0%, #281731 42%, #1a1529 75%, #13142a 100%)}
 canvas#bgv,canvas#glv{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 canvas#dish{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation;cursor:pointer;display:block}
 .hud{position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:12px;pointer-events:none;display:flex;flex-direction:column;gap:2px}
@@ -121,6 +121,14 @@ canvas#dish{position:absolute;inset:0;width:100%;height:100%;touch-action:manipu
 .alert{left:max(12px,env(safe-area-inset-left,0px)) !important;transform:none !important;max-width:calc(100% - 170px) !important}
 .icon-btn{background:none;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--muted);font-family:var(--f-mono);font-size:11px;cursor:pointer}
 .row.flash{animation:flash .45s ease-out}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+.toggle{width:46px;height:26px;border-radius:999px;border:1px solid var(--line);background:var(--slide);position:relative;cursor:pointer;flex-shrink:0}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--dim);transition:transform .15s,background .15s}
+.toggle[aria-pressed="true"]{background:rgba(67,230,160,.18);border-color:var(--gfp)}
+.toggle[aria-pressed="true"]::after{transform:translateX(20px);background:var(--gfp)}
+.coach-hl{animation:coach 1.4s ease-in-out infinite;border-color:var(--gfp)!important}
+@keyframes coach{50%{box-shadow:0 0 0 5px rgba(67,230,160,.25)}}
+.alert.coach{border-color:var(--gfp);color:var(--gfp);white-space:normal}
 @keyframes flash{0%{box-shadow:0 0 0 0 rgba(67,230,160,.6);border-color:var(--gfp)}100%{box-shadow:0 0 0 10px rgba(67,230,160,0)}}
 .goal{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
 .goal .ck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:12px;color:var(--bg)}
@@ -221,6 +229,11 @@ canvas#dish{position:absolute;inset:0;width:100%;height:100%;touch-action:manipu
           <p><b style="color:var(--amber)">Recombination events</b> glow gold. Tap one for a burst of virions, mutations, or a 7× replication surge.</p>
           <p>While the tab is closed your strain goes <b>latent</b> and keeps replicating at a reduced rate for up to 8 hours.</p>
         </div>
+        <div class="card">
+          <h3 style="font-size:16px">Settings</h3>
+          <div class="setrow"><span>Sound effects</span><button class="toggle" id="setSound" aria-pressed="true"></button></div>
+          <div class="setrow" id="hapRow" hidden><span>Vibration</span><button class="toggle" id="setHap" aria-pressed="true"></button></div>
+        </div>
         <div><button class="ghost danger" id="wipeBtn">Sterilize lab (erase save)</button></div>
       </div>
     </div>
@@ -272,7 +285,7 @@ const KEY = 'viral-load-v1';
 
 // ---------- state ----------
 function fresh(){return {v:0,run:0,life:0,taps:0,owned:{},traits:{},mut:0,nextMut:50,mutRun:0,genome:0,spec:0,
-  buy:'1',sound:true,goals:[],maxCombo:1,dose:0,last:Date.now(),started:Date.now(),best:0,boostUntil:0,boostMult:1,kills:0,events:0,code:randCode()};}
+  buy:'1',sound:true,haptics:true,goals:[],maxCombo:1,dose:0,last:Date.now(),started:Date.now(),best:0,boostUntil:0,boostMult:1,kills:0,events:0,code:randCode()};}
 function randCode(){const L='abcdefghjk';return 'VX-'+(1+Math.floor(Math.random()*98))+L[Math.floor(Math.random()*L.length)];}
 let S = fresh();
 const hot = window.claude && window.claude.hot;
@@ -442,24 +455,34 @@ function renderTop(){
   // alert line
   if(immune){ el.alert.hidden=false; el.alert.className='alert immune'; el.alert.textContent=`Macrophage! −${Math.round((1-immunePenalty())*100)}% · tap it ${'●'.repeat(immune.hp)}`; }
   else if(Date.now()<S.boostUntil){ el.alert.hidden=false; el.alert.className='alert boost'; el.alert.textContent=`Recombinant surge ×${S.boostMult} · ${Math.ceil((S.boostUntil-Date.now())/1000)}s`; }
-  else el.alert.hidden=true;
+  else { const c=coachText(); if(c){ el.alert.hidden=false; el.alert.className='alert coach'; el.alert.textContent=c; } else el.alert.hidden=true; }
   el.hint.hidden = S.taps>=5;
+  const firstBuy=S.spec===0 && S.taps>=5 && !Object.keys(S.owned).length && S.v>=unitCost(PRODUCERS[0],0);
+  $('prod-ribo').classList.toggle('coach-hl',firstBuy);
+  $('tab-evo').classList.toggle('coach-hl',coachStep==='evo' && tab!=='evo');
   const dc=doseCost(), mb=$('mutagenBtn'); mb.disabled=S.v<dc; $('mutagenCost').textContent=fmt(dc)+' virions';
 }
-let tab='rep';
+let tab='rep', coachStep='';
+function coachText(){
+  coachStep='';
+  if(S.spec>0 || S.taps<5) return '';
+  if(!Object.keys(S.owned).length) return S.v>=unitCost(PRODUCERS[0],0) ? 'Buy a Ribosome Hijack below. It replicates for you.' : 'Keep tapping. You need 15 virions for your first machine.';
+  if(S.mut>=1 && !Object.keys(S.traits).length){ coachStep='evo'; return 'You have a mutation. Spend it in Evolve.'; }
+  return '';
+}
 function renderAll(){ renderTop(); if(tab==='rep') renderProducers(); renderTraits(); renderSpec(); if(tab==='log'){ renderLog(); renderGoals(); } }
 
 // ---------- actions ----------
 function buyProducer(p){
   const n=buyCount(p), c=costN(p,n);
   if(S.v<c) return;
-  S.v-=c; S.owned[p.id]=own(p.id)+n; pulse=Math.max(pulse,.5); blip(520,.06,'square',.025,1.4);
+  S.v-=c; S.owned[p.id]=own(p.id)+n; pulse=Math.max(pulse,.5); haptic('select'); blip(520,.06,'square',.025,1.4);
   const rb=prodRows[p.id].b; rb.classList.remove('flash'); void rb.offsetWidth; rb.classList.add('flash');
   renderAll();
 }
 function buyTrait(t){
   const c=traitCost(t); if(T(t.id)>=t.max||S.mut<c) return;
-  S.mut-=c; S.traits[t.id]=T(t.id)+1; pulse=1; mutFx=Math.max(mutFx,.6); renderAll(); toast(`${t.name} → level ${T(t.id)}`);
+  S.mut-=c; S.traits[t.id]=T(t.id)+1; pulse=1; haptic('medium'); mutFx=Math.max(mutFx,.6); renderAll(); toast(`${t.name} → level ${T(t.id)}`);
 }
 let confirmTimer=null;
 $('speBtn').addEventListener('click',()=>{
@@ -469,7 +492,7 @@ $('speBtn').addEventListener('click',()=>{
     clearTimeout(confirmTimer); confirmTimer=setTimeout(()=>{b.classList.remove('confirm'); renderSpec();},3500); return;
   }
   clearTimeout(confirmTimer); b.classList.remove('confirm');
-  const keep={genome:S.genome+g,spec:S.spec+1,life:S.life,taps:S.taps,started:S.started,best:S.best,kills:S.kills,events:S.events,buy:S.buy,sound:S.sound,goals:S.goals,maxCombo:S.maxCombo};
+  const keep={genome:S.genome+g,spec:S.spec+1,life:S.life,taps:S.taps,started:S.started,best:S.best,kills:S.kills,events:S.events,buy:S.buy,sound:S.sound,haptics:S.haptics,goals:S.goals,maxCombo:S.maxCombo};
   S=Object.assign(fresh(),keep); immune=null; golden=null; particles.length=0; save();
   setTab('rep'); renderAll(); speciateFx=1.5;
   showModal(`<h3>New family: ${family(S.spec).name}</h3><p>Your strain ${S.code} carries ${S.genome} genome points: +${S.genome*10}% replication from the first copy.</p><button class="big-btn" id="mOk">Begin replicating</button>`);
@@ -496,7 +519,9 @@ function blip(freq,dur,type,vol,slide){ const a=audio(); if(!a) return; try{ con
   o.type=type||'sine'; o.frequency.setValueAtTime(freq,t0); o.frequency.exponentialRampToValueAtTime(Math.max(20,freq*(slide||1)),t0+dur);
   g.gain.setValueAtTime(vol||0.06,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0+dur+0.03); }catch(e){} }
 function chime(notes){ notes.forEach((f,i)=>setTimeout(()=>blip(f,.22,'sine',.05,1),i*70)); }
-function syncSound(){ const b=$('soundBtn'); b.textContent=S.sound?'♪ on':'♪ off'; b.setAttribute('aria-label',S.sound?'Sound on':'Sound off'); b.setAttribute('aria-pressed',S.sound); }
+function syncSound(){ $('setSound').setAttribute('aria-pressed',S.sound); $('setHap').setAttribute('aria-pressed',S.haptics!==false); $('hapRow').hidden=!NATIVE; const b=$('soundBtn'); b.textContent=S.sound?'♪ on':'♪ off'; b.setAttribute('aria-label',S.sound?'Sound on':'Sound off'); b.setAttribute('aria-pressed',S.sound); }
+$('setSound').addEventListener('click',()=>$('soundBtn').click());
+$('setHap').addEventListener('click',()=>{ S.haptics=!S.haptics; syncSound(); haptic('medium'); });
 $('soundBtn').addEventListener('click',()=>{ S.sound=!S.sound; syncSound(); if(S.sound) blip(440,.1,'sine',.06,1.5); });
 
 // ---------- tap frenzy ----------
@@ -530,7 +555,7 @@ const GOALS=[
 ];
 function checkGoals(){
   for(const g of GOALS){ if(S.goals.includes(g.id) || !g.ok()) continue;
-    S.goals.push(g.id); gainMut(g.r); toast(`Goal reached: ${g.n} · +${g.r} mutations`); chime([659,880,1175,1568]); }
+    S.goals.push(g.id); gainMut(g.r); toast(`Goal reached: ${g.n} · +${g.r} mutations`); chime([659,880,1175,1568]); haptic('success'); }
 }
 function renderGoals(){
   const done=S.goals.length; $('goalSum').textContent=`${done} of ${GOALS.length} complete. Each goal pays out mutations once.`;
@@ -589,8 +614,8 @@ cv.addEventListener('pointerdown',e=>{
   const rc=cv.getBoundingClientRect(), x=e.clientX-rc.left, y=e.clientY-rc.top;
   if(golden && hit(golden,x,y,34)){ claimGolden(); return; }
   if(immune && hit(immune,x,y,immune.r+16)){
-    immune.hp--; immune.shake=1; emit(6,immune.x,immune.y); blip(120,.12,'sawtooth',.035,.6);
-    if(immune.hp<=0){ S.kills++; gainMut(1+Math.floor(S.spec/2)); floatText(`+${1+Math.floor(S.spec/2)} mutation`,immune.x,immune.y-20,'#43e6a0'); immune=null; toast('Macrophage neutralized'); }
+    immune.hp--; immune.shake=1; haptic('rigid'); emit(6,immune.x,immune.y); blip(120,.12,'sawtooth',.035,.6);
+    if(immune.hp<=0){ S.kills++; haptic('success'); gainMut(1+Math.floor(S.spec/2)); floatText(`+${1+Math.floor(S.spec/2)} mutation`,immune.x,immune.y-20,'#43e6a0'); immune=null; toast('Macrophage neutralized'); }
     renderTop(); return;
   }
   // tap = replicate, but only on (or right next to) the virus
@@ -601,13 +626,13 @@ cv.addEventListener('pointerdown',e=>{
   let v=tapValue()*cm, crit=Math.random()<0.04*T('burst');
   if(crit) v*=12;
   crit ? (blip(150,.28,'triangle',.11,.35), blip(300,.2,'sine',.05,.5)) : blip(200+combo*14,.09,'sine',.08,.45);
-  earn(v); S.taps++; pulse=1;
+  earn(v); S.taps++; pulse=1; haptic(crit?'heavy':'light');
   const vc=virusCenter(); emit(crit?22:5+Math.min(10,Math.floor(Math.log10(v+1))), x*0.6+vc.x*0.4, y*0.6+vc.y*0.4, crit);
   floatText((crit?'BURST +':'+')+fmt(v), x+(Math.random()*16-8), y-6-Math.random()*6, crit?'#ffc34d':'#ffffff');
   renderTop();
 });
 function claimGolden(){
-  const r=Math.random(), rate=vps()/immunePenalty()||0; S.events++;
+  const r=Math.random(), rate=vps()/immunePenalty()||0; S.events++; haptic('success');
   if(r<0.4 || rate<1){ const amt=Math.max(rate*60, tapValue()*40); earn(amt); floatText('Recombination +'+fmt(amt),golden.x,golden.y,'#ffc34d'); toast(`Recombination: +${fmt(amt)} virions`); }
   else if(r<0.7){ const m=2+Math.floor(S.spec/2)+Math.floor(Math.random()*3); gainMut(m); floatText(`+${m} mutations`,golden.x,golden.y,'#43e6a0'); toast(`Gene swap: +${m} mutations`); }
   else { S.boostMult=7; S.boostUntil=Date.now()+30000; floatText('×7 SURGE',golden.x,golden.y,'#ffc34d'); toast('Recombinant surge: ×7 replication for 30s'); }
@@ -677,10 +702,13 @@ function stepPheno(dt){
 function vdc(n){let v=0,d=1;n+=1;while(n){d*=2;v+=(n&1)/d;n>>=1;}return v;}
 const SPK=[]; for(let i=0;i<72;i++){ const z=1-2*vdc(i), r=Math.sqrt(Math.max(0,1-z*z)), ph=i*2.399963+0.7; SPK.push([Math.cos(ph)*r,Math.sin(ph)*r,z]); }
 function onMutation(n){
-  mutFx=1; const L=drift().last; if(!L) return; mutGene=L.gi;
+  mutFx=1; haptic('medium'); const L=drift().last; if(!L) return; mutGene=L.gi;
   if(tNow-lastMutText>0.7){ lastMutText=tNow; chime([523,784,1046]); floatText(`MUTATION · ${GENES[L.gi].n} ${L.s>0?'▲':'▼'}`, cx, cy-R*1.75, '#43e6a0', true); }
 }
 function gainMut(n){ S.mut+=n; S.mutRun+=n; onMutation(n); }
+const NATIVE=!!window.ReactNativeWebView; let lastHap=0;
+function haptic(k){ if(!NATIVE||!S.haptics) return; const now=performance.now(); if(k==='light'&&now-lastHap<45) return; lastHap=now;
+  try{ window.ReactNativeWebView.postMessage(JSON.stringify({t:'haptic',k})); }catch(e){} }
 
 // ---------- 3D helpers ----------
 const LIGHT=(()=>{const v=[-0.45,-0.6,0.66],l=Math.hypot(...v);return v.map(c=>c/l);})();
@@ -831,7 +859,7 @@ function drawVirus(t){
   ctx.save(); ctx.translate(cx,cy+oy); ctx.scale(sx,sy);
   // dark aura that eats the light, then a sick glow at its heart
   const hr=Rb*(2.6+p.elong*0.8);
-  let ag=ctx.createRadialGradient(0,0,Rb*0.6,0,0,hr); ag.addColorStop(0,'rgba(0,0,0,.6)'); ag.addColorStop(1,'rgba(0,0,0,0)');
+  let ag=ctx.createRadialGradient(0,0,Rb*0.6,0,0,hr); ag.addColorStop(0,'rgba(8,0,10,.3)'); ag.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,hr,0,7); ctx.fill();
   ctx.globalCompositeOperation='lighter';
   ag=ctx.createRadialGradient(0,0,Rb*0.7,0,0,Rb*1.9*Math.max(1,ex*0.7)); ag.addColorStop(0,`hsla(${p.hue},100%,40%,${0.12+0.14*HB+0.3*mf})`); ag.addColorStop(1,'hsla(0,0%,0%,0)');
@@ -989,7 +1017,7 @@ vec3 sss=vec3(.5,.06,.07)*max(wrap-d,0.);
 vec3 H=normalize(L+V);float nh=max(dot(N,H),0.);
 float sp=(pow(nh,60.)*.9+pow(nh,12.)*.06)*wet;
 float fr=pow(1.-max(dot(N,V),0.),3.);
-vec3 col=alb*(.03+1.2*d+.12*max(dot(N,L2),0.))*ao+sss*(alb*1.5+.03)+vec3(1.,.95,.92)*sp*ao
+vec3 col=alb*(.07+1.2*d+.2*max(dot(N,L2),0.))*ao+sss*(alb*1.5+.03)+vec3(1.,.95,.92)*sp*ao
  +uGlow*fr*(.07+.14*uHB)+emis+uGlow*uMut*(fr*1.1+.08);
 col=1.-exp(-col*1.3);col=pow(col,vec3(.9));
 gl_FragColor=vec4(col,1.);}`;
@@ -1138,7 +1166,7 @@ function renderGL(t){
   const bodyH=p.hue+(((345-p.hue+540)%360)-180)*0.25; BODY_H=bodyH;
   const u=RR.u;
   gl.uniform4f(u.xf,cx,cy+oy,Rb,0); gl.uniform2f(u.res,W,H); gl.uniform2f(u.sq,1+bounce*0.08,1-bounce*0.05);
-  gl.uniform3fv(u.body,hsl2rgb(bodyH,0.38,0.22)); gl.uniform3fv(u.glow,hsl2rgb(p.hue,1,0.5));
+  gl.uniform3fv(u.body,hsl2rgb(bodyH,0.38,0.25)); gl.uniform3fv(u.glow,hsl2rgb(p.hue,1,0.5));
   gl.uniform1f(u.hb,HB); gl.uniform1f(u.mut,mutFx); gl.uniform1f(u.time,t); gl.uniform1f(u.ia,G_IA); gl.uniform1f(u.bump,0.55);
   const c0=rot([1,0,0]),c1=rot([0,1,0]),c2=rot([0,0,1]); gl.uniformMatrix3fv(u.rot,false,[...c0,...c1,...c2]);
   gl.drawElements(gl.TRIANGLES,RR.ni,gl.UNSIGNED_SHORT,0);
@@ -1147,7 +1175,7 @@ function renderGL(t){
 // soft aura behind the GL virus, on the background layer
 function drawAura(g,Rb,oy){
   const p=P, ex=1+p.elong*1.4, hr=Rb*(2.6+p.elong*0.8), x=cx, y=cy+oy;
-  let ag=g.createRadialGradient(x,y,Rb*0.6,x,y,hr); ag.addColorStop(0,'rgba(0,0,0,.65)'); ag.addColorStop(1,'rgba(0,0,0,0)');
+  let ag=g.createRadialGradient(x,y,Rb*0.6,x,y,hr); ag.addColorStop(0,'rgba(8,0,10,.32)'); ag.addColorStop(1,'rgba(0,0,0,0)');
   g.fillStyle=ag; g.beginPath(); g.arc(x,y,hr,0,7); g.fill();
   g.globalCompositeOperation='lighter';
   ag=g.createRadialGradient(x,y,Rb*0.7,x,y,Rb*1.9*Math.max(1,ex*0.7)); ag.addColorStop(0,`hsla(${p.hue},100%,40%,${0.1+0.12*HB+0.3*mutFx})`); ag.addColorStop(1,'hsla(0,0%,0%,0)');
@@ -1164,10 +1192,10 @@ function drawCells(t, infected){
     const c=cells[i], x=c.x*W+Math.sin(t*c.sp+c.ph)*20, y=c.y*H+Math.cos(t*c.sp*0.8+c.ph)*16, r=c.r*Math.min(W,H)*0.95;
     const inf = i < Math.round(infected*cells.length);
     const g=ctx.createRadialGradient(x-r*0.2,y-r*0.2,r*0.1,x,y,r);
-    g.addColorStop(0, inf?'rgba(150,20,50,.12)':'rgba(90,110,140,.04)'); g.addColorStop(1, inf?'rgba(120,10,40,.03)':'rgba(90,110,140,.01)');
+    g.addColorStop(0, inf?'rgba(190,40,80,.2)':'rgba(150,170,210,.1)'); g.addColorStop(1, inf?'rgba(150,20,60,.06)':'rgba(140,160,200,.035)');
     ctx.beginPath(); ctx.ellipse(x,y,r,r*0.82,c.ph,0,7); ctx.fillStyle=g; ctx.fill();
-    ctx.strokeStyle = inf? 'rgba(200,30,70,.2)':'rgba(110,130,160,.08)'; ctx.lineWidth=1; ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(x+r*0.15,y-r*0.1,r*0.3,r*0.26,c.ph,0,7); ctx.fillStyle=inf?'rgba(90,0,25,.25)':'rgba(80,95,130,.06)'; ctx.fill();
+    ctx.strokeStyle = inf? 'rgba(230,70,110,.32)':'rgba(170,190,230,.2)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x+r*0.15,y-r*0.1,r*0.3,r*0.26,c.ph,0,7); ctx.fillStyle=inf?'rgba(120,10,45,.3)':'rgba(130,150,200,.13)'; ctx.fill();
     if(inf && !reduced){ for(let k=0;k<4;k++){ const a=t*0.3+k*1.57+i, bx=x+Math.cos(a)*r*0.95, by=y+Math.sin(a)*r*0.78; ctx.globalAlpha=.5; ctx.drawImage(sprite(P?P.hue:340),bx-6,by-6,12,12); ctx.globalAlpha=1; } }
   }
 }
@@ -1221,7 +1249,7 @@ function frame(now){
   // background layer: host cells, vignette, aura
   const top=ctx; ctx=bctx; ctx.clearRect(0,0,W,H);
   if(!window.__iconTransparent) drawCells(tNow, Math.min(1, Math.log10(r+1)/9));
-  if(!window.__iconTransparent){ const vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.25,cx,cy,Math.max(W,H)*0.75); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(18,0,6,.78)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
+  if(!window.__iconTransparent){ const vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.25,cx,cy,Math.max(W,H)*0.75); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(12,6,20,.42)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
   let glInfo=null;
   if(GLR && !ICON){ slowT = (dt>0.03||window.__forceSlow) ? slowT+dt : Math.max(0,slowT-dt*0.5);
     if(slowT>1.5 && GL_SCALE>0.5 && !window.__noAdapt){ GL_SCALE=Math.max(0.5,GL_SCALE*0.75); slowT=0; resizeGL(); } }
@@ -1298,6 +1326,8 @@ function start(seed){
   setInterval(tick,100);
 }
 window.__bench=(t)=>{ if(GLR) buildVirusMesh(GLR,t); return GLR?GLR.nv:0; };
+window.__vlBack=()=>{ if(!$('modal').hidden){ $('modal').hidden=true; return; } if(tab!=='rep'){ setTab('rep'); return; }
+  try{ window.ReactNativeWebView.postMessage(JSON.stringify({t:'exit'})); }catch(e){} };
 window.__vlSave=save; window.__vlResume=applyOffline;
 if(hot && hot.ready) hot.ready(start); else start(hot && hot.data ? hot.data : null);
 })();
