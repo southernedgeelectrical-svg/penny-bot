@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Quiet Orbit",
+    "slug": "quiet-orbit",
+    "owner": "hambones-team",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0e18",
+    "android": {
+      "package": "com.hambones.quietorbit",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0e18",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0b0e18",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8752f8a7-3b3c-4cdc-86d2-2d65183e5a84"
+      }
+    }
+  }
+}

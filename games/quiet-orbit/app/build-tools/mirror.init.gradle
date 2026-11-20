@@ -1,0 +1,9 @@
+// Adds Google's public mirror of Maven Central ahead of the default repos, to avoid Maven Central rate limits.
+def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
+beforeSettings { settings ->
+  settings.pluginManagement.repositories { maven { url mirror } }
+}
+allprojects {
+  buildscript.repositories { maven { url mirror } }
+  repositories { maven { url mirror } }
+}

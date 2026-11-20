@@ -1,0 +1,765 @@
+<title>Quiet Orbit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen app. Phone = stats bar / tilted solar system / tabbed panel stacked; wide = system left, panel right.
+   Look: a dark-adapted observatory. Nothing on screen is brighter than a soft off-white; glows are faint and nothing flashes. */
+:root{
+  color-scheme: dark;
+  --void:#0b0e18; --deep:#10141f; --panel:#141927; --panel2:#191f30; --line:#262d44;
+  --fg:#c6cad6; --muted:#7f879d; --dim:#565e76;
+  --sun:#c4a36c; --teal:#73a39f; --rose:#b48693; --violet:#8f89bf;
+  --f-display:"Sora","Segoe UI",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  background:var(--void);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{height:100%}
+body{margin:0;background:var(--void);color:var(--fg);font-family:var(--f-body);font-size:14px;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
+button{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(230px,44%) 1fr}
+@media (min-width:900px){
+  .app{grid-template-columns:minmax(0,1.2fr) minmax(380px,1fr);grid-template-rows:auto 1fr}
+  .stats{grid-column:1 / -1}
+  .scene{grid-row:2;grid-column:1}
+  .lab{grid-row:2;grid-column:2;border-left:1px solid var(--line);border-top:0 !important}
+}
+/* stats bar */
+.stats{display:flex;align-items:center;gap:14px;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:var(--deep);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:-.01em;margin-right:auto;display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.brand small{font-family:var(--f-mono);font-weight:400;font-size:11px;color:var(--muted)}
+.stat{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
+.stat .k{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);white-space:nowrap}
+.stat .v{font-family:var(--f-mono);font-weight:500;font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat.cat .v{color:var(--teal)} .stat.seed .v{color:var(--sun)}
+.icon-btn{background:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--muted);font-size:15px;line-height:1;cursor:pointer}
+/* scene */
+.scene{position:relative;min-height:0;overflow:hidden;background:var(--void)}
+.scene canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#sky{pointer-events:none}
+#sys{touch-action:manipulation;cursor:pointer}
+.hud{position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:12px;pointer-events:none;display:flex;flex-direction:column;gap:3px}
+.count{font-family:var(--f-display);font-weight:600;font-size:clamp(28px,5.5vw,46px);letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.count-sub{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.starname{position:absolute;right:max(14px,env(safe-area-inset-right,0px));top:12px;text-align:right;pointer-events:none}
+.starname .n{font-family:var(--f-display);font-weight:600;font-size:14px;color:var(--sun)}
+.starname .c{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);font-family:var(--f-mono);font-size:12px;color:var(--muted);pointer-events:none;white-space:nowrap}
+.alert{position:absolute;left:max(12px,env(safe-area-inset-left,0px));bottom:12px;font-family:var(--f-mono);font-size:12px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(16,20,31,.88);pointer-events:none;max-width:calc(100% - 24px);white-space:normal}
+.alert.sun{border-color:#5c4e36;color:var(--sun)}
+.alert.teal{border-color:#3a5552;color:var(--teal)}
+/* panel */
+.lab{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-top:1px solid var(--line)}
+.tabs{display:flex;gap:4px;padding-block:8px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
+.tab{flex:1;min-width:0;background:none;border:1px solid transparent;border-radius:8px;padding:8px 4px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer;position:relative}
+.tab[aria-selected="true"]{color:var(--fg);background:var(--panel2);border-color:var(--line)}
+.tab .dot{position:absolute;top:6px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--teal)}
+.pane{flex:1;overflow-y:auto;padding-block:12px 24px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));-webkit-overflow-scrolling:touch}
+.pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 10px}
+.pane-head h2{margin:0;font-family:var(--f-display);font-size:15px;font-weight:600}
+.pane-head p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-shrink:0}
+.seg button{background:none;border:0;padding:6px 10px;font-family:var(--f-mono);font-size:12px;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel2);color:var(--fg)}
+.list{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;text-align:left;width:100%}
+.row:disabled{cursor:not-allowed}
+.row:not(:disabled):hover{border-color:#36405e}
+.row.locked{opacity:.45}
+.ico{width:40px;height:40px;border-radius:9px;display:grid;place-items:center;background:var(--deep);border:1px solid var(--line)}
+.ico canvas{width:30px;height:30px}
+.meta{min-width:0}
+.meta .n{font-weight:700;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.meta .n .lv{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-weight:400}
+.meta .d{color:var(--muted);font-size:12px;margin-top:2px}
+.meta .bar{height:3px;border-radius:2px;background:var(--line);margin-top:6px;overflow:hidden}
+.meta .bar i{display:block;height:100%;background:var(--violet)}
+.price{font-family:var(--f-mono);font-size:13px;font-weight:500;text-align:right;white-space:nowrap}
+.price small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.row.can .price{color:var(--teal)}
+.row:not(.can) .price{color:var(--dim)}
+.row.flash{animation:flash .5s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(115,163,159,.35);border-color:var(--teal)}100%{box-shadow:0 0 0 8px rgba(115,163,159,0)}}
+.coach-hl{animation:coach 1.8s ease-in-out infinite;border-color:var(--teal)!important}
+@keyframes coach{50%{box-shadow:0 0 0 4px rgba(115,163,159,.18)}}
+.empty{color:var(--muted);font-size:13px;padding:6px 2px;line-height:1.5}
+/* catalog */
+.cat{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.entry{padding:10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);display:flex;flex-direction:column;gap:4px;text-align:left;cursor:pointer;min-width:0}
+.entry .t{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:flex;align-items:center;gap:6px}
+.entry .t i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.entry .n{font-family:var(--f-display);font-weight:600;font-size:14px}
+.entry .how{font-size:12px;color:var(--dim)}
+.entry.unknown{cursor:default}
+.entry.unknown .n{color:var(--dim)}
+.entry.new{border-color:#3a5552}
+/* cards */
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.card h3{margin:0;font-family:var(--f-display);font-size:18px;font-weight:600;text-wrap:balance}
+.card p{margin:0;color:var(--muted);line-height:1.55;max-width:62ch}
+.card .fact{color:var(--fg);font-size:15px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:13px;margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.big-btn{border:1px solid #5c4e36;background:rgba(196,163,108,.08);color:var(--sun);border-radius:10px;padding:12px 16px;font-weight:600;font-family:var(--f-display);font-size:15px;cursor:pointer}
+.big-btn:disabled{border-color:var(--line);color:var(--dim);background:none;cursor:not-allowed}
+.big-btn.confirm{background:#4a3f2c;color:#e0cfa8}
+.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--muted);cursor:pointer;font-size:13px}
+.ghost.danger{border-color:#5e3c45;color:var(--rose)}
+.lineage{display:flex;gap:6px;flex-wrap:wrap}
+.lineage span{font-family:var(--f-mono);font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+.lineage span.done{color:var(--fg);border-color:#3a4363}
+.lineage span.cur{color:var(--sun);border-color:#5c4e36}
+/* settings */
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+.setrow small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.toggle{width:46px;height:26px;border-radius:999px;border:1px solid var(--line);background:var(--deep);position:relative;cursor:pointer;flex-shrink:0}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--dim);transition:transform .15s,background .15s}
+.toggle[aria-pressed="true"]{background:rgba(115,163,159,.15);border-color:#3a5552}
+.toggle[aria-pressed="true"]::after{transform:translateX(20px);background:var(--teal)}
+input[type=range]{width:160px;accent-color:var(--teal)}
+.rangeval{font-family:var(--f-mono);font-size:12px;color:var(--muted);min-width:38px;text-align:right}
+/* modal + toast */
+.modal{position:fixed;inset:0;background:rgba(5,7,12,.7);display:grid;place-items:center;z-index:20;padding:16px}
+.modal .card{max-width:400px;width:100%;max-height:calc(100% - 32px);overflow:auto}
+.modal .gain{font-family:var(--f-display);font-weight:600;font-size:28px;color:var(--sun)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;z-index:30;max-width:calc(100% - 32px);display:flex;flex-direction:column;gap:2px}
+.toast b{font-family:var(--f-display);font-weight:600;color:var(--teal)}
+.toast span{color:var(--muted);font-size:12px}
+/* whole-screen dimmer driven by the Brightness setting */
+#dimmer{position:fixed;inset:0;background:#000;pointer-events:none;z-index:50;opacity:0}
+@media (prefers-reduced-motion:reduce){.row.flash,.coach-hl{animation:none}}
+@media (max-width:440px){
+  .stats{gap:10px}
+  .brand{font-size:15px} .brand small{display:none}
+  .stat .k{font-size:9px;letter-spacing:.08em} .stat .v{font-size:12.5px}
+  .tab{font-size:12px}
+}
+</style>
+
+<div class="app" id="app">
+  <header class="stats">
+    <div class="brand">Quiet Orbit <small id="sysShort">SYSTEM 1</small></div>
+    <div class="stat"><span class="k">per sec</span><span class="v" id="sRate">0</span></div>
+    <div class="stat cat"><span class="k">found</span><span class="v" id="sCat">0</span></div>
+    <div class="stat seed"><span class="k">seeds</span><span class="v" id="sSeed">0</span></div>
+    <button class="icon-btn" id="setBtn" aria-label="Settings">⚙</button>
+  </header>
+
+  <section class="scene" id="scene" aria-label="Your solar system. Tap the star to gather stardust.">
+    <canvas id="sky"></canvas>
+    <canvas id="sys"></canvas>
+    <div class="hud">
+      <div class="count" id="count">0</div>
+      <div class="count-sub" id="countSub">stardust</div>
+    </div>
+    <div class="starname"><div class="n" id="starKind">Yellow dwarf</div><div class="c" id="starAge">System 1</div></div>
+    <div class="hint" id="hint">tap the star to gather stardust</div>
+    <div class="alert" id="alert" hidden></div>
+  </section>
+
+  <section class="lab">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-build" aria-selected="true" data-tab="build">Build</button>
+      <button class="tab" role="tab" id="tab-res" aria-selected="false" data-tab="res">Research<span class="dot" id="resDot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-cat" aria-selected="false" data-tab="cat">Catalog<span class="dot" id="catDot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-nova" aria-selected="false" data-tab="nova">Supernova<span class="dot" id="novaDot" hidden></span></button>
+    </div>
+
+    <div class="pane" id="pane-build">
+      <div class="pane-head">
+        <div><h2>Build your system</h2><p>Every 25 of one kind doubles its output.</p></div>
+        <div class="seg" id="buyMode"><button data-m="1" aria-pressed="true">×1</button><button data-m="10" aria-pressed="false">×10</button><button data-m="max" aria-pressed="false">Max</button></div>
+      </div>
+      <div class="list" id="prodList"></div>
+    </div>
+
+    <div class="pane" id="pane-res" hidden>
+      <div class="pane-head"><div><h2>Research</h2><p id="resSum">One-time upgrades. They reset when your star goes supernova.</p></div></div>
+      <div class="list" id="resList"></div>
+    </div>
+
+    <div class="pane" id="pane-cat" hidden>
+      <div class="pane-head"><div><h2>Sky catalog</h2><p id="catSum">Each real object you find adds +3% to all stardust, forever.</p></div></div>
+      <div class="cat" id="catList"></div>
+    </div>
+
+    <div class="pane" id="pane-nova" hidden>
+      <div class="stack">
+        <div class="card">
+          <h3>Go supernova</h3>
+          <p>Your star collapses and its heavy elements seed a new system. Stardust, buildings and research reset. You keep your catalog and gain star seeds: each one adds +10% to all stardust, forever.</p>
+          <dl class="kv">
+            <dt>Stardust this system</dt><dd id="nvRun">0</dd>
+            <dt>Needed</dt><dd id="nvReq">1.00B</dd>
+            <dt>Star seeds gained</dt><dd id="nvGain" style="color:var(--sun)">+0</dd>
+            <dt>Next star</dt><dd id="nvNext">—</dd>
+          </dl>
+          <button class="big-btn" id="novaBtn" disabled>Go supernova</button>
+        </div>
+        <div class="card">
+          <h3 style="font-size:15px">Star history</h3>
+          <div class="lineage" id="lineage"></div>
+        </div>
+        <div class="card">
+          <h3 style="font-size:15px">Observer's notes</h3>
+          <p><b style="color:var(--fg)">Tap planets</b> as they orbit. Each tap on a planet gathers three times the usual stardust.</p>
+          <p><b style="color:var(--fg)">Meteors</b> drift across the sky now and then. Tap one for a bonus or a 20-second ×5 gravity surge.</p>
+          <p>While this page is closed your system keeps gathering at half speed for up to 8 hours.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="modal" hidden><div class="card" id="modalCard"></div></div>
+<div class="modal" id="settings" hidden>
+  <div class="card" role="dialog" aria-labelledby="setTitle">
+    <h3 id="setTitle">Settings</h3>
+    <div class="setrow"><label for="bright">Brightness<small>Dims the whole screen</small></label><span style="display:flex;align-items:center;gap:8px"><input type="range" id="bright" min="40" max="100" step="5" value="90"><span class="rangeval" id="brightVal">90%</span></span></div>
+    <div class="setrow"><span>Calm motion<small>Slower orbits, no twinkling</small></span><button class="toggle" id="setCalm" aria-pressed="false" aria-label="Calm motion"></button></div>
+    <div class="setrow"><span>Sound<small>Soft tones on tap</small></span><button class="toggle" id="setSound" aria-pressed="true" aria-label="Sound"></button></div>
+    <dl class="kv" id="statKv"></dl>
+    <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap">
+      <button class="ghost danger" id="wipeBtn">Erase save</button>
+      <button class="big-btn" id="setClose" style="padding:8px 18px">Done</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div id="dimmer"></div>
+
+<script>
+(function(){
+"use strict";
+// ---------- data ----------
+const PRODUCERS=[
+  {id:'dust', name:'Dust Cloud',   desc:'Cold grains drifting between stars',      base:15,    rate:0.2,   col:'#9a8f7e', up:'Accretion'},
+  {id:'rock', name:'Asteroid',     desc:'Rubble left over from planet building',  base:110,   rate:1.2,   col:'#8c8479', up:'Orbital resonance'},
+  {id:'comet',name:'Comet',        desc:'Dirty snowballs on long, looping orbits',base:1200,  rate:8,     col:'#86aab0', up:'Ice reserves'},
+  {id:'terra',name:'Rocky Planet', desc:'Iron cores under stone crusts',          base:13000, rate:47,    col:'#a87a62', up:'Plate tectonics'},
+  {id:'moon', name:'Moon',         desc:'Born from impacts or caught by gravity', base:1.4e5, rate:260,   col:'#a3a39c', up:'Tidal locking'},
+  {id:'giant',name:'Gas Giant',    desc:'Hydrogen worlds with storms for weather',base:2e6,   rate:1400,  col:'#b39a7c', up:'Deep storms'},
+  {id:'star', name:'Neighbor Star',desc:'Another sun, a few light-years away',    base:3e7,   rate:7800,  col:'#c7b48a', up:'Fusion shells'},
+  {id:'neb',  name:'Nebula',       desc:'Clouds of gas where stars are born',     base:4e8,   rate:44000, col:'#9a86b8', up:'Shock fronts'},
+  {id:'gal',  name:'Galaxy',       desc:'Hundreds of billions of stars',          base:6e9,   rate:2.6e5, col:'#8e9cc0', up:'Spiral arms'},
+  {id:'web',  name:'Supercluster', desc:'Galaxies strung along the cosmic web',   base:9e10,  rate:1.6e6, col:'#7fa6a0', up:'Cosmic web'},
+];
+const PLANETS=[
+  {n:'Mercury',c:'#968f86',s:.15},{n:'Venus',c:'#bba57c',s:.22},{n:'Earth',c:'#5d84a3',s:.23,land:'#6f8a62'},{n:'Mars',c:'#a96d58',s:.18},
+  {n:'Jupiter',c:'#b39878',s:.48,bands:'#8f7259'},{n:'Saturn',c:'#bfae86',s:.42,ring:true},{n:'Uranus',c:'#8db0b2',s:.32},{n:'Neptune',c:'#6a82b0',s:.31}
+];
+const STARS=[
+  {k:'Yellow dwarf', c:'#c4a36c'},{k:'Orange dwarf',c:'#c28a5f'},{k:'Red dwarf',c:'#b06d63'},
+  {k:'Blue-white star',c:'#8b9fbf'},{k:'Yellow giant',c:'#c2ad7a'},{k:'Blue supergiant',c:'#7d95bc'}
+];
+const CATALOG=[
+  {id:'sun',  n:'The Sun',          t:'Star',     c:'#c4a36c', how:'Tap your star',          ok:()=>S.taps>=1,          f:'The Sun holds about 99.86% of all the mass in the solar system.'},
+  {id:'ceres',n:'Ceres',            t:'Dwarf planet',c:'#8c8479',how:'Own 1 asteroid',      ok:()=>own('rock')>=1,     f:'Ceres is the largest object in the asteroid belt, about 940 km across. It counts as a dwarf planet.'},
+  {id:'halley',n:"Halley's Comet",  t:'Comet',    c:'#86aab0', how:'Own 1 comet',            ok:()=>own('comet')>=1,    f:"Halley's Comet comes back about every 76 years. It was last seen in 1986 and returns in 2061."},
+  {id:'merc', n:'Mercury',          t:'Planet',   c:'#968f86', how:'Own 1 rocky planet',     ok:()=>own('terra')>=1,    f:'A year on Mercury is 88 Earth days, but one sunrise to the next takes 176 Earth days.'},
+  {id:'venus',n:'Venus',            t:'Planet',   c:'#bba57c', how:'Own 2 rocky planets',    ok:()=>own('terra')>=2,    f:'Venus is the hottest planet, around 465 °C at the surface, even though Mercury is closer to the Sun.'},
+  {id:'earth',n:'Earth',            t:'Planet',   c:'#5d84a3', how:'Own 3 rocky planets',    ok:()=>own('terra')>=3,    f:'Earth is the only world we know of with oceans of liquid water on its surface.'},
+  {id:'mars', n:'Mars',             t:'Planet',   c:'#a96d58', how:'Own 4 rocky planets',    ok:()=>own('terra')>=4,    f:'Olympus Mons on Mars is about 22 km tall, roughly two and a half times the height of Everest.'},
+  {id:'luna', n:'The Moon',         t:'Moon',     c:'#a3a39c', how:'Own 1 moon',             ok:()=>own('moon')>=1,     f:'The Moon is drifting away from Earth by about 3.8 cm every year.'},
+  {id:'jup',  n:'Jupiter',          t:'Planet',   c:'#b39878', how:'Own 1 gas giant',        ok:()=>own('giant')>=1,    f:"Jupiter's Great Red Spot is a storm wider than Earth that has been raging for well over 150 years."},
+  {id:'sat',  n:'Saturn',           t:'Planet',   c:'#bfae86', how:'Own 2 gas giants',       ok:()=>own('giant')>=2,    f:"Saturn's main rings stretch about 280,000 km across, yet in most places they are only tens of meters thick."},
+  {id:'ura',  n:'Uranus',           t:'Planet',   c:'#8db0b2', how:'Own 3 gas giants',       ok:()=>own('giant')>=3,    f:'Uranus spins tipped on its side, with an axial tilt of about 98 degrees.'},
+  {id:'nep',  n:'Neptune',          t:'Planet',   c:'#6a82b0', how:'Own 4 gas giants',       ok:()=>own('giant')>=4,    f:'Neptune has the fastest winds measured in the solar system, over 2,000 km/h.'},
+  {id:'europa',n:'Europa',          t:'Moon',     c:'#b7ad98', how:'Own 10 moons',           ok:()=>own('moon')>=10,    f:"Jupiter's moon Europa very likely hides a salty liquid ocean beneath its ice shell."},
+  {id:'titan',n:'Titan',            t:'Moon',     c:'#b39a6a', how:'Own 25 moons',           ok:()=>own('moon')>=25,    f:"Saturn's moon Titan has lakes and seas made of liquid methane and ethane."},
+  {id:'pluto',n:'Pluto',            t:'Dwarf planet',c:'#a89584',how:'Own 50 asteroids',    ok:()=>own('rock')>=50,    f:'Pluto has a heart-shaped plain of nitrogen ice called Tombaugh Regio.'},
+  {id:'kuiper',n:'Kuiper Belt',     t:'Region',   c:'#7c97a3', how:'Own 25 comets',          ok:()=>own('comet')>=25,   f:'The Kuiper Belt is a wide ring of icy bodies beyond Neptune. Pluto lives there.'},
+  {id:'voy',  n:'Voyager 1',        t:'Probe',    c:'#9aa0ad', how:'Tap 1,000 times',        ok:()=>S.taps>=1000,       f:'Voyager 1, launched in 1977, is the most distant human-made object, more than 24 billion km from Earth.'},
+  {id:'prox', n:'Proxima Centauri', t:'Star',     c:'#b06d63', how:'Own 1 neighbor star',    ok:()=>own('star')>=1,     f:'Proxima Centauri is the closest star to the Sun, about 4.24 light-years away.'},
+  {id:'sirius',n:'Sirius',          t:'Star',     c:'#9fb0c8', how:'Own 10 neighbor stars',  ok:()=>own('star')>=10,    f:'Sirius is the brightest star in the night sky, about 8.6 light-years away.'},
+  {id:'betel',n:'Betelgeuse',       t:'Star',     c:'#b4705c', how:'Own 25 neighbor stars',  ok:()=>own('star')>=25,    f:'Betelgeuse is a red supergiant. Put in place of the Sun, it would reach past the orbit of Mars.'},
+  {id:'orion',n:'Orion Nebula',     t:'Nebula',   c:'#9a86b8', how:'Own 1 nebula',           ok:()=>own('neb')>=1,      f:'The Orion Nebula is a star nursery about 1,340 light-years away. You can see it without a telescope.'},
+  {id:'crab', n:'Crab Nebula',      t:'Nebula',   c:'#a58a96', how:'Own 10 nebulae',         ok:()=>own('neb')>=10,     f:'The Crab Nebula is what remains of a supernova that astronomers saw in the year 1054.'},
+  {id:'pillar',n:'Pillars of Creation',t:'Nebula',c:'#8f9f86', how:'Own 25 nebulae',         ok:()=>own('neb')>=25,     f:'The Pillars of Creation in the Eagle Nebula are columns of gas and dust several light-years tall.'},
+  {id:'milky',n:'Milky Way',        t:'Galaxy',   c:'#8e9cc0', how:'Own 1 galaxy',           ok:()=>own('gal')>=1,      f:'Our galaxy, the Milky Way, holds somewhere between 100 and 400 billion stars.'},
+  {id:'andro',n:'Andromeda',        t:'Galaxy',   c:'#9a93b8', how:'Own 10 galaxies',        ok:()=>own('gal')>=10,     f:'The Andromeda Galaxy is about 2.5 million light-years away and is slowly heading toward the Milky Way.'},
+  {id:'sgra', n:'Sagittarius A*',   t:'Black hole',c:'#7a7f93',how:'Own 25 galaxies',        ok:()=>own('gal')>=25,     f:'A black hole about 4 million times the mass of the Sun sits at the center of the Milky Way.'},
+  {id:'lani', n:'Laniakea',         t:'Supercluster',c:'#7fa6a0',how:'Own 1 supercluster',  ok:()=>own('web')>=1,      f:'Laniakea is the supercluster that contains the Milky Way. It spans about 520 million light-years.'},
+  {id:'cmb',  n:'Cosmic background',t:'Light',    c:'#a0907a', how:'1 quadrillion lifetime stardust',ok:()=>S.life>=1e15, f:'The cosmic microwave background is the oldest light we can see, released about 380,000 years after the Big Bang.'},
+];
+const SCOPES=['Brass spyglass','Refractor lens','Reflector mirror','Adaptive optics','Radio dish array','Space telescope','Interferometer'];
+const NUM=['I','II','III','IV','V'];
+const RESEARCH=[];
+SCOPES.forEach((n,i)=>RESEARCH.push({id:'tap'+i,n,d:'Tap yield ×2',cost:100*Math.pow(18,i),req:()=>S.taps>=10*(i+1)||S.life>=100*Math.pow(18,i)*0.5,kind:'tap'}));
+for(let i=0;i<5;i++) RESEARCH.push({id:'track'+i,n:'Sidereal drive '+NUM[i],d:'Each tap also gathers 1% of your per-second rate',cost:4000*Math.pow(40,i),req:()=>S.life>=2000*Math.pow(40,i),kind:'track'});
+for(let i=0;i<4;i++) RESEARCH.push({id:'grav'+i,n:'Gravity assist '+NUM[i],d:'+50% all stardust',cost:1e5*Math.pow(120,i),req:()=>S.life>=5e4*Math.pow(120,i),kind:'grav'});
+const TIERS=[10,25,50,100,150], TMULT=[10,60,600,8000,1.2e5];
+PRODUCERS.forEach(p=>TIERS.forEach((t,i)=>RESEARCH.push({id:p.id+i,n:p.up+' '+NUM[i],d:p.name+' output ×2',cost:p.base*TMULT[i],req:()=>own(p.id)>=t,kind:'prod',p:p.id,need:t})));
+const NOVA_REQ=1e9, KEY='quiet-orbit-v1', OFFLINE_CAP=8*3600;
+
+// ---------- state ----------
+function fresh(){return {sd:0,run:0,life:0,taps:0,owned:{},res:[],cat:[],seen:[],seeds:0,novas:0,buy:'1',sound:true,bright:90,calm:false,
+  last:Date.now(),started:Date.now(),best:0,boostUntil:0,catches:0};}
+let S=fresh();
+const reducedPref=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+function load(d){
+  if(!d){ try{ const raw=localStorage.getItem(KEY); if(raw) d=JSON.parse(raw);}catch(e){} }
+  if(d) S=Object.assign(fresh(),d); else if(reducedPref) S.calm=true;
+}
+function save(){ S.last=Date.now(); try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot){ try{ hot.snapshot(()=>({S})); }catch(e){} }
+
+// ---------- math ----------
+const own=id=>S.owned[id]||0;
+const has=id=>S.res.includes(id);
+const countRes=k=>S.res.filter(id=>{const r=RESEARCH.find(x=>x.id===id);return r&&r.kind===k;}).length;
+function boostMult(){ return Date.now()<S.boostUntil?5:1; }
+function globalMult(){ return (1+0.1*S.seeds)*(1+0.03*S.cat.length)*Math.pow(1.5,countRes('grav'))*boostMult(); }
+function prodMult(p){ let m=Math.pow(2,Math.floor(own(p.id)/25)); for(let i=0;i<5;i++) if(has(p.id+i)) m*=2; return m; }
+function prodOut(p){ return p.rate*own(p.id)*prodMult(p); }
+function rate(){ let s=0; for(const p of PRODUCERS) s+=prodOut(p); return s*globalMult(); }
+function unitCost(p,o){ return p.base*Math.pow(1.15,o); }
+function costN(p,n){ return unitCost(p,own(p.id))*(Math.pow(1.15,n)-1)/0.15; }
+function maxN(p){ const c0=unitCost(p,own(p.id)); if(S.sd<c0) return 0; return Math.floor(Math.log(S.sd*0.15/c0+1)/Math.log(1.15)); }
+function buyCount(p){ return S.buy==='max'?Math.max(1,maxN(p)):+S.buy; }
+function tapValue(){ return Math.pow(2,countRes('tap'))*(1+0.1*S.seeds)*(1+0.03*S.cat.length)*boostMult()+rate()*0.01*countRes('track'); }
+function novaGain(){ return S.run<NOVA_REQ?0:Math.floor(Math.sqrt(S.run/1e8)); }
+const star=i=>STARS[i%STARS.length];
+function earn(n){ S.sd+=n; S.run+=n; S.life+=n; }
+
+// ---------- format ----------
+const SUF=['','K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','Dc'];
+function fmt(n){
+  if(!isFinite(n)) return '∞';
+  if(n<1000) return n<10&&n%1?(Math.floor(n*10)/10).toFixed(1):Math.floor(n).toString();
+  const e=Math.floor(Math.log10(n)/3);
+  if(e<SUF.length){ const x=n/Math.pow(1000,e); return (x<10?x.toFixed(2):x<100?x.toFixed(1):Math.floor(x))+SUF[e]; }
+  return n.toExponential(2).replace('+','');
+}
+function fmtTime(s){ s=Math.floor(s); const h=Math.floor(s/3600),m=Math.floor(s%3600/60); return h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`; }
+
+// ---------- colour helpers ----------
+function rgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+function mix(h,t,k){ const a=rgb(h),b=rgb(t); return `rgb(${a.map((v,i)=>Math.round(v+(b[i]-v)*k)).join(',')})`; }
+function rgba(h,a){ const c=rgb(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+// ---------- icons ----------
+function drawIcon(x,kind,col){
+  x.save(); x.translate(30,30); x.lineWidth=2.4; x.strokeStyle=col; x.fillStyle=rgba(col,.3);
+  const circ=(r,fill)=>{x.beginPath();x.arc(0,0,r,0,7);if(fill){x.fillStyle=fill;x.fill();}};
+  switch(kind){
+    case 'dust': for(let i=0;i<14;i++){const a=i*2.4,r=4+i*1.3;x.fillStyle=rgba(col,.35+.4*(i%3)/2);x.beginPath();x.arc(Math.cos(a)*r,Math.sin(a)*r,1.8,0,7);x.fill();} break;
+    case 'rock': x.beginPath(); [16,12,17,13,15,11,16,14].forEach((r,i)=>{const a=i/8*6.283;x.lineTo(Math.cos(a)*r,Math.sin(a)*r);}); x.closePath(); x.fill(); x.stroke(); break;
+    case 'comet': { const g=x.createLinearGradient(8,-8,-22,22); g.addColorStop(0,rgba(col,.7)); g.addColorStop(1,rgba(col,0)); x.strokeStyle=g; x.lineWidth=8; x.lineCap='round'; x.beginPath(); x.moveTo(8,-8); x.lineTo(-20,20); x.stroke(); circ(6,col); } break;
+    case 'terra': { const g=x.createRadialGradient(-6,-6,2,0,0,17); g.addColorStop(0,mix(col,'#e8e0d0',.25)); g.addColorStop(1,mix(col,'#000000',.55)); circ(16,g); } break;
+    case 'moon': circ(15,col); x.globalCompositeOperation='destination-out'; x.beginPath(); x.arc(8,-5,13,0,7); x.fill(); break;
+    case 'giant': { circ(14,col); x.strokeStyle=mix(col,'#000000',.35); x.lineWidth=2; [-6,0,6].forEach(y=>{x.beginPath();x.moveTo(-13,y);x.lineTo(13,y);x.stroke();}); x.strokeStyle=rgba(col,.8); x.lineWidth=2; x.beginPath(); x.ellipse(0,0,25,7,-.35,0,7); x.stroke(); } break;
+    case 'star': x.beginPath(); for(let i=0;i<8;i++){const r=i%2?5:18,a=i/8*6.283-1.571;x.lineTo(Math.cos(a)*r,Math.sin(a)*r);} x.closePath(); x.fillStyle=rgba(col,.75); x.fill(); break;
+    case 'neb': [[-6,-3,13,.35],[7,4,12,.3],[0,8,9,.25],[3,-8,8,.25]].forEach(([a,b,r,o])=>{const g=x.createRadialGradient(a,b,0,a,b,r);g.addColorStop(0,rgba(col,o+.25));g.addColorStop(1,rgba(col,0));x.fillStyle=g;x.beginPath();x.arc(a,b,r,0,7);x.fill();}); break;
+    case 'gal': x.lineWidth=2.2; for(let arm=0;arm<2;arm++){x.beginPath();for(let t=0;t<3.6;t+=.12){const r=2+t*5,a=t+arm*3.1416;x.lineTo(Math.cos(a)*r,Math.sin(a)*r*.6);}x.stroke();} circ(3.5,col); break;
+    case 'web': { const pts=[[-15,-10],[-2,-15],[13,-6],[-11,8],[4,4],[14,13],[-3,16]]; x.strokeStyle=rgba(col,.5); x.lineWidth=1.4; [[0,1],[1,2],[0,3],[1,4],[3,4],[4,5],[2,5],[3,6],[4,6]].forEach(([a,b])=>{x.beginPath();x.moveTo(...pts[a]);x.lineTo(...pts[b]);x.stroke();}); x.fillStyle=col; pts.forEach(p=>{x.beginPath();x.arc(p[0],p[1],2.4,0,7);x.fill();}); } break;
+    case 'tap': x.strokeStyle=col; x.lineWidth=3; x.beginPath(); x.moveTo(-14,8); x.lineTo(10,-8); x.stroke(); x.beginPath(); x.arc(12,-9,5,0,7); x.stroke(); x.beginPath(); x.moveTo(-4,2); x.lineTo(-10,16); x.moveTo(-4,2); x.lineTo(2,16); x.stroke(); break;
+    case 'track': x.beginPath(); x.arc(0,0,14,0,7); x.stroke(); x.beginPath(); x.moveTo(0,0); x.lineTo(0,-10); x.moveTo(0,0); x.lineTo(8,4); x.stroke(); break;
+    case 'grav': x.beginPath(); x.ellipse(0,0,18,8,0,0,7); x.stroke(); x.beginPath(); x.ellipse(0,0,10,4,0,0,7); x.stroke(); circ(4,col); break;
+  }
+  x.restore();
+}
+function iconCanvas(kind,col){ const c=document.createElement('canvas'); c.width=c.height=60; drawIcon(c.getContext('2d'),kind,col); return c; }
+
+// ---------- DOM ----------
+const $=id=>document.getElementById(id);
+const prodRows={};
+function buildProducers(){
+  const list=$('prodList'); list.innerHTML='';
+  PRODUCERS.forEach(p=>{
+    const b=document.createElement('button'); b.className='row'; b.id='prod-'+p.id;
+    const ico=document.createElement('div'); ico.className='ico'; ico.appendChild(iconCanvas(p.id==='terra'||p.id==='giant'||p.id==='moon'?p.id:p.id,p.col));
+    const meta=document.createElement('div'); meta.className='meta';
+    meta.innerHTML='<div class="n"><span></span><span class="lv"></span></div><div class="d"></div><div class="bar"><i></i></div>';
+    const price=document.createElement('div'); price.className='price';
+    b.append(ico,meta,price); list.appendChild(b);
+    b.addEventListener('click',()=>buyProducer(p));
+    prodRows[p.id]={b,name:meta.querySelector('.n span'),lv:meta.querySelector('.lv'),d:meta.querySelector('.d'),bar:meta.querySelector('.bar i'),price};
+  });
+}
+function renderProducers(){
+  const gm=globalMult(); let hiddenShown=false;
+  PRODUCERS.forEach((p,i)=>{
+    const r=prodRows[p.id], o=own(p.id);
+    const visible=i===0||own(PRODUCERS[i-1].id)>0||S.run>=p.base*0.5||o>0;
+    if(!visible){ if(hiddenShown){ r.b.hidden=true; return; } hiddenShown=true; }
+    r.b.hidden=false;
+    const n=buyCount(p), c=costN(p,n), can=visible&&S.sd>=c;
+    r.b.disabled=!can; r.b.classList.toggle('can',can); r.b.classList.toggle('locked',!visible);
+    r.name.textContent=visible?p.name:'Unknown object';
+    r.lv.textContent=o?'×'+o:'';
+    const each=p.rate*prodMult(p)*gm;
+    r.d.textContent=visible?(o?`${fmt(prodOut(p)*gm)}/s total · ${p.desc}`:`${fmt(each)}/s each · ${p.desc}`):'Keep gathering to spot it';
+    r.bar.style.width=((o%25)/25*100)+'%';
+    r.price.innerHTML=visible?`${fmt(c)}<small>×${n}</small>`:'?<small>&nbsp;</small>';
+  });
+}
+let resSig='';
+function availableResearch(){ return RESEARCH.filter(r=>!has(r.id)&&r.req()).sort((a,b)=>a.cost-b.cost); }
+function renderResearch(){
+  const av=availableResearch();
+  $('resDot').hidden=!av.some(r=>S.sd>=r.cost);
+  if(tab!=='res') return;
+  const sig=av.map(r=>r.id+(S.sd>=r.cost?1:0)).join(',');
+  if(sig===resSig) return; resSig=sig;
+  const list=$('resList'); list.innerHTML='';
+  $('resSum').textContent=`${S.res.length} of ${RESEARCH.length} done. One-time upgrades; they reset on supernova.`;
+  if(!av.length){ list.innerHTML='<div class="empty">Nothing to research right now. Build more and new projects will appear here.</div>'; return; }
+  av.slice(0,14).forEach(r=>{
+    const can=S.sd>=r.cost, b=document.createElement('button'); b.className='row'+(can?' can':''); b.disabled=!can;
+    const p=r.p&&PRODUCERS.find(x=>x.id===r.p);
+    const ico=document.createElement('div'); ico.className='ico'; ico.appendChild(iconCanvas(p?p.id:r.kind,p?p.col:(r.kind==='tap'?'#c4a36c':r.kind==='track'?'#73a39f':'#8f89bf')));
+    const meta=document.createElement('div'); meta.className='meta'; meta.innerHTML=`<div class="n"><span>${r.n}</span></div><div class="d">${r.d}</div>`;
+    const price=document.createElement('div'); price.className='price'; price.innerHTML=`${fmt(r.cost)}<small>stardust</small>`;
+    b.append(ico,meta,price); b.addEventListener('click',()=>buyResearch(r)); list.appendChild(b);
+  });
+}
+let catSig='';
+function renderCatalog(){
+  $('catDot').hidden=!S.cat.some(id=>!S.seen.includes(id));
+  if(tab!=='cat') return;
+  const sig=S.cat.join(',')+'|'+S.seen.length; if(sig===catSig) return; catSig=sig;
+  $('catSum').textContent=`${S.cat.length} of ${CATALOG.length} found · +${S.cat.length*3}% to all stardust. Tap an entry to read about it.`;
+  $('catList').innerHTML=CATALOG.map(c=>{
+    const got=S.cat.includes(c.id), nw=got&&!S.seen.includes(c.id);
+    return `<button class="entry${got?'':' unknown'}${nw?' new':''}" data-id="${c.id}" ${got?'':'disabled'}>
+      <span class="t"><i style="background:${got?c.c:'#262d44'}"></i>${got?c.t:'Unknown'}${nw?' · new':''}</span>
+      <span class="n">${got?c.n:'???'}</span>${got?'':`<span class="how">${c.how}</span>`}</button>`;
+  }).join('');
+}
+$('catList').addEventListener('click',e=>{
+  const b=e.target.closest('.entry'); if(!b||b.disabled) return; const c=CATALOG.find(x=>x.id===b.dataset.id);
+  if(!S.seen.includes(c.id)) S.seen.push(c.id);
+  showModal(`<span class="t" style="font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">${c.t}</span><h3>${c.n}</h3><p class="fact">${c.f}</p><button class="big-btn" id="mOk">Close</button>`);
+  renderCatalog();
+});
+function renderNova(){
+  const g=novaGain();
+  $('nvRun').textContent=fmt(S.run); $('nvReq').textContent=fmt(NOVA_REQ); $('nvGain').textContent='+'+g; $('nvNext').textContent=star(S.novas+1).k;
+  const b=$('novaBtn');
+  if(!b.classList.contains('confirm')){ b.disabled=g<=0; b.textContent=g>0?`Go supernova (+${g} star seeds)`:`Gather ${fmt(NOVA_REQ)} stardust to go supernova`; }
+  $('novaDot').hidden=g<=0;
+  let h=''; for(let i=0;i<=S.novas+1;i++){ h+=`<span class="${i<S.novas?'done':i===S.novas?'cur':''}">${i+1}. ${i<=S.novas+1?star(i).k:'?'}</span>`; }
+  $('lineage').innerHTML=h;
+}
+const el={count:$('count'),countSub:$('countSub'),rate:$('sRate'),cat:$('sCat'),seed:$('sSeed'),alert:$('alert'),hint:$('hint')};
+function renderTop(){
+  const r=rate();
+  el.count.textContent=fmt(S.sd);
+  el.countSub.textContent=`stardust · ${fmt(tapValue())} per tap`;
+  el.rate.textContent=fmt(r); el.cat.textContent=`${S.cat.length}/${CATALOG.length}`; el.seed.textContent=S.seeds;
+  $('starKind').textContent=star(S.novas).k; $('starAge').textContent='System '+(S.novas+1); $('sysShort').textContent='SYSTEM '+(S.novas+1);
+  if(Date.now()<S.boostUntil){ el.alert.hidden=false; el.alert.className='alert sun'; el.alert.textContent=`Gravity surge ×5 · ${Math.ceil((S.boostUntil-Date.now())/1000)}s`; }
+  else if(meteor){ el.alert.hidden=false; el.alert.className='alert teal'; el.alert.textContent='A meteor is passing. Tap it.'; }
+  else { const c=coachText(); if(c){ el.alert.hidden=false; el.alert.className='alert teal'; el.alert.textContent=c; } else el.alert.hidden=true; }
+  el.hint.hidden=S.taps>=5||!el.alert.hidden;
+  const first=S.novas===0&&S.taps>=5&&!Object.keys(S.owned).length&&S.sd>=unitCost(PRODUCERS[0],0);
+  $('prod-dust').classList.toggle('coach-hl',first);
+}
+function coachText(){
+  if(S.novas>0||S.taps<5) return '';
+  if(!Object.keys(S.owned).length) return S.sd>=15?'Build a Dust Cloud below. It gathers stardust for you.':'Keep tapping the star. Your first Dust Cloud costs 15.';
+  if(!S.res.length&&availableResearch().some(r=>S.sd>=r.cost)) return 'Research is ready. Open the Research tab.';
+  return '';
+}
+function renderAll(){ renderTop(); if(tab==='build') renderProducers(); renderResearch(); renderCatalog(); if(tab==='nova') renderNova(); else $('novaDot').hidden=novaGain()<=0; }
+
+// ---------- actions ----------
+function buyProducer(p){
+  const n=buyCount(p), c=costN(p,n); if(S.sd<c) return;
+  S.sd-=c; S.owned[p.id]=own(p.id)+n; tone(392,.12); skyDirty=true;
+  const rb=prodRows[p.id].b; rb.classList.remove('flash'); void rb.offsetWidth; rb.classList.add('flash');
+  checkCatalog(); renderAll();
+}
+function buyResearch(r){ if(S.sd<r.cost||has(r.id)) return; S.sd-=r.cost; S.res.push(r.id); resSig=''; tone(523,.15); tone(659,.18,.08); toast('Research done',r.n); renderAll(); }
+function checkCatalog(){
+  for(const c of CATALOG){ if(S.cat.includes(c.id)||!c.ok()) continue;
+    S.cat.push(c.id); catSig=''; toast('New in your catalog: '+c.n, c.f); tone(587,.2); tone(784,.25,.1); }
+}
+let tab='build';
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
+function setTab(t){ tab=t; resSig=''; catSig=''; document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t)); ['build','res','cat','nova'].forEach(k=>$('pane-'+k).hidden=k!==t); renderAll(); }
+document.querySelectorAll('#buyMode button').forEach(b=>b.addEventListener('click',()=>{S.buy=b.dataset.m; syncBuy(); renderProducers();}));
+function syncBuy(){ document.querySelectorAll('#buyMode button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.m===S.buy)); }
+let confirmT=null;
+$('novaBtn').addEventListener('click',()=>{
+  const b=$('novaBtn'), g=novaGain(); if(g<=0) return;
+  if(!b.classList.contains('confirm')){ b.classList.add('confirm'); b.textContent=`Tap again to confirm (+${g} star seeds)`; clearTimeout(confirmT); confirmT=setTimeout(()=>{b.classList.remove('confirm');renderNova();},3500); return; }
+  clearTimeout(confirmT); b.classList.remove('confirm');
+  const keep={seeds:S.seeds+g,novas:S.novas+1,life:S.life,taps:S.taps,cat:S.cat,seen:S.seen,started:S.started,best:S.best,catches:S.catches,buy:S.buy,sound:S.sound,bright:S.bright,calm:S.calm};
+  S=Object.assign(fresh(),keep); meteor=null; resSig=''; catSig=''; skyDirty=true; novaRing=0.001; save();
+  setTab('build');
+  showModal(`<h3>A new ${star(S.novas).k.toLowerCase()} is born</h3><p>Your old star scattered its heavy elements into space. You now hold ${S.seeds} star seeds, worth +${S.seeds*10}% stardust from the first tap.</p><button class="big-btn" id="mOk">Start the new system</button>`);
+});
+
+// ---------- toast / modal ----------
+let toastT=null;
+function toast(title,sub){ const t=$('toast'); t.innerHTML=`<b>${title}</b>${sub?`<span>${sub}</span>`:''}`; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,sub?4200:2200); }
+function showModal(html){ $('modalCard').innerHTML=html; $('modal').hidden=false; const ok=$('mOk'); if(ok) ok.onclick=()=>{$('modal').hidden=true;}; }
+
+// ---------- settings ----------
+function applySettings(){
+  $('dimmer').style.opacity=((100-S.bright)/100*0.85).toFixed(3);
+  $('bright').value=S.bright; $('brightVal').textContent=S.bright+'%';
+  $('setCalm').setAttribute('aria-pressed',S.calm); $('setSound').setAttribute('aria-pressed',S.sound);
+}
+$('setBtn').addEventListener('click',()=>{ renderStats(); $('settings').hidden=false; });
+$('setClose').addEventListener('click',()=>{ $('settings').hidden=true; save(); });
+$('settings').addEventListener('click',e=>{ if(e.target.id==='settings') $('settings').hidden=true; });
+$('bright').addEventListener('input',e=>{ S.bright=+e.target.value; applySettings(); });
+$('setCalm').addEventListener('click',()=>{ S.calm=!S.calm; applySettings(); });
+$('setSound').addEventListener('click',()=>{ S.sound=!S.sound; applySettings(); if(S.sound) tone(440,.15); });
+$('wipeBtn').addEventListener('click',()=>{
+  const b=$('wipeBtn');
+  if(b.dataset.c!=='1'){ b.dataset.c='1'; b.textContent='Tap again to erase everything'; setTimeout(()=>{b.dataset.c='';b.textContent='Erase save';},3500); return; }
+  try{localStorage.removeItem(KEY);}catch(e){}
+  const keep={bright:S.bright,calm:S.calm,sound:S.sound};
+  S=Object.assign(fresh(),keep); meteor=null; resSig=''; catSig=''; skyDirty=true; b.dataset.c=''; b.textContent='Erase save';
+  $('settings').hidden=true; setTab('build'); toast('Save erased','A fresh dust cloud is waiting.');
+});
+function renderStats(){
+  const rows=[['Time observing',fmtTime((Date.now()-S.started)/1000)],['Lifetime stardust',fmt(S.life)],['Best rate',fmt(S.best)+'/s'],['Taps',fmt(S.taps)],['Meteors caught',S.catches],['Supernovae',S.novas]];
+  $('statKv').innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+
+// ---------- sound: soft sine tones on a pentatonic scale ----------
+let AC=null;
+function tone(f,dur,delay){
+  if(!S.sound) return;
+  try{ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume();
+    const t0=AC.currentTime+(delay||0), o=AC.createOscillator(), g=AC.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(f,t0); g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.035,t0+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(AC.destination); o.start(t0); o.stop(t0+dur+0.05);
+  }catch(e){}
+}
+const PENTA=[262,294,330,392,440,523,587,659];
+
+// ---------- canvas ----------
+const sky=$('sky'), skx=sky.getContext('2d'), cv=$('sys'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1,cx=0,cy=0,R=30,maxR=200; const TILT=0.42;
+let skyDirty=true, skySig='';
+function resize(){
+  const r=$('scene').getBoundingClientRect(); DPR=Math.min(2,window.devicePixelRatio||1); W=r.width; H=r.height;
+  for(const c of [sky,cv]){ c.width=Math.round(W*DPR); c.height=Math.round(H*DPR); }
+  ctx.setTransform(DPR,0,0,DPR,0,0); skx.setTransform(DPR,0,0,DPR,0,0);
+  cx=W/2; cy=H*0.57; R=Math.max(15,Math.min(46,W*0.07,H*0.1));
+  maxR=Math.max(R*3.2,Math.min(W*0.47-8,(H*0.39)/TILT));
+  skyDirty=true;
+}
+window.addEventListener('resize',resize);
+try{ new ResizeObserver(()=>{const r=$('scene').getBoundingClientRect(); if(Math.abs(r.width-W)>0.5||Math.abs(r.height-H)>0.5) resize();}).observe($('scene')); }catch(e){}
+
+function rng(seed){ let a=seed>>>0; return ()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}; }
+const bucket=n=>n<=0?0:Math.min(40,Math.floor(Math.log2(n+1)*3));
+function paintSky(){
+  const sig=[W,H,bucket(own('star')),bucket(own('neb')),bucket(own('gal')),bucket(own('web'))].join('|');
+  if(!skyDirty&&sig===skySig) return; skySig=sig; skyDirty=false;
+  const g=skx; g.clearRect(0,0,W,H); g.fillStyle='#0b0e18'; g.fillRect(0,0,W,H);
+  const r=rng(7+S.novas*31);
+  // nebulae: very faint coloured clouds
+  const nNeb=Math.min(6,Math.ceil(Math.log2(own('neb')+1)));
+  const nebCols=['#8f89bf','#b48693','#73a39f','#9a86b8','#a0907a'];
+  for(let i=0;i<nNeb;i++){ const x=r()*W,y=r()*H,rad=Math.max(W,H)*(0.18+r()*0.22),c=nebCols[i%nebCols.length];
+    const gr=g.createRadialGradient(x,y,0,x,y,rad); gr.addColorStop(0,rgba(c,.085)); gr.addColorStop(.6,rgba(c,.03)); gr.addColorStop(1,rgba(c,0)); g.fillStyle=gr; g.fillRect(0,0,W,H); }
+  // galaxies: small tilted spirals
+  const nGal=Math.min(10,Math.ceil(Math.log2(own('gal')+1)*1.5));
+  const gals=[];
+  for(let i=0;i<nGal;i++){ const x=r()*W,y=r()*H*0.9,s=6+r()*12,rot=r()*3.14,tilt=.35+r()*.5; gals.push([x,y]);
+    g.save(); g.translate(x,y); g.rotate(rot); g.scale(1,tilt);
+    const gr=g.createRadialGradient(0,0,0,0,0,s); gr.addColorStop(0,'rgba(190,195,215,.22)'); gr.addColorStop(1,'rgba(190,195,215,0)'); g.fillStyle=gr; g.beginPath(); g.arc(0,0,s,0,7); g.fill();
+    g.strokeStyle='rgba(170,178,205,.12)'; g.lineWidth=1.2;
+    for(let a=0;a<2;a++){ g.beginPath(); for(let t=0;t<4;t+=.15){ const rr=t*s*.32; g.lineTo(Math.cos(t+a*3.14)*rr,Math.sin(t+a*3.14)*rr);} g.stroke(); }
+    g.restore(); }
+  // superclusters: faint threads linking galaxies
+  if(own('web')>0&&gals.length>1){ g.strokeStyle='rgba(127,166,160,.07)'; g.lineWidth=1; g.beginPath(); for(let i=1;i<gals.length;i++){ g.moveTo(...gals[i-1]); g.lineTo(...gals[i]); } g.stroke(); }
+  // background stars: dim points, more with neighbor stars
+  const n=Math.round(W*H/2600)+Math.min(300,own('star')*6);
+  for(let i=0;i<n;i++){ const b=r(), x=r()*W, y=r()*H, warm=r();
+    g.fillStyle=warm<.2?`rgba(214,190,160,${.08+b*.28})`:warm<.35?`rgba(165,180,214,${.08+b*.28})`:`rgba(200,204,218,${.06+b*.26})`;
+    const z=b>.97?1.6:1; g.fillRect(x,y,z,z); }
+}
+// twinkle set (a handful of stars that breathe slowly)
+const twinkles=[]; { const r=rng(99); for(let i=0;i<26;i++) twinkles.push({x:r(),y:r(),p:r()*6.28,s:.3+r()*.5}); }
+
+// objects with fixed random parameters
+const prng=rng(2024);
+const PLPH=PLANETS.map(()=>prng()*6.283);
+const BELT=[]; for(let i=0;i<260;i++) BELT.push({a:prng()*6.283,d:prng()*2-1,s:.6+prng()*.8,z:prng()});
+const DUST=[]; for(let i=0;i<120;i++) DUST.push({x:prng(),y:prng(),vx:(prng()-.5)*.006,vy:(prng()-.5)*.004,a:.08+prng()*.16,r:.6+prng()*1.1});
+const COMETS=[]; for(let i=0;i<7;i++) COMETS.push({a:.5+prng()*.45,e:.62+prng()*.22,w:prng()*6.283,M:prng()*6.283,sp:.9+prng()*.5});
+const STARRING=[]; for(let i=0;i<10;i++) STARRING.push({ph:prng()*6.283,d:.25+prng()*.6,h:prng()});
+
+const SLOTF=[0,.1,.2,.31,.56,.71,.86,1], BELTF=.43;
+function slotR(i){ const r0=R*1.95; return r0+(maxR-r0)*SLOTF[i]; }
+const proj=(a,r)=>[cx+Math.cos(a)*r, cy+Math.sin(a)*r*TILT];
+let tAnim=0, pulse=0, novaRing=0;
+const ripples=[], floats=[];
+let hitPlanets=[];
+let meteor=null, nextMeteor=25;
+
+function drawPlanet(P,x,y,pr,t){
+  const dx=cx-x, dy=cy-y, d=Math.hypot(dx,dy)||1, lx=dx/d, ly=dy/d;
+  if(P.ring){ ctx.save(); ctx.strokeStyle=rgba('#bfae86',.35); ctx.lineWidth=Math.max(1,pr*.28); ctx.beginPath(); ctx.ellipse(x,y,pr*2.1,pr*.62,-.22,Math.PI,2*Math.PI); ctx.stroke(); ctx.restore(); }
+  const g=ctx.createRadialGradient(x+lx*pr*.45,y+ly*pr*.45,pr*.1,x,y,pr*1.05);
+  g.addColorStop(0,mix(P.c,'#ddd6c8',.18)); g.addColorStop(.55,P.c); g.addColorStop(1,mix(P.c,'#05070c',.72));
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,pr,0,7); ctx.fill();
+  if(P.bands&&pr>5){ ctx.save(); ctx.beginPath(); ctx.arc(x,y,pr,0,7); ctx.clip(); ctx.strokeStyle=rgba(P.bands,.45); ctx.lineWidth=Math.max(1,pr*.14);
+    [-.45,-.1,.3].forEach(k=>{ctx.beginPath();ctx.moveTo(x-pr,y+k*pr);ctx.lineTo(x+pr,y+k*pr);ctx.stroke();}); ctx.restore(); }
+  if(P.land&&pr>3){ ctx.save(); ctx.beginPath(); ctx.arc(x,y,pr,0,7); ctx.clip(); ctx.fillStyle=rgba(P.land,.55); const sh=(t*.25)%(pr*4);
+    [[-.3,-.2,.35],[.4,.3,.28]].forEach(([a,b,s])=>{ctx.beginPath();ctx.arc(x+((a*pr+sh)%(pr*2.4))-pr*.6,y+b*pr,s*pr,0,7);ctx.fill();}); ctx.restore(); }
+  if(P.ring){ ctx.save(); ctx.strokeStyle=rgba('#bfae86',.5); ctx.lineWidth=Math.max(1,pr*.28); ctx.beginPath(); ctx.ellipse(x,y,pr*2.1,pr*.62,-.22,0,Math.PI); ctx.stroke(); ctx.restore(); }
+}
+function drawSun(t){
+  const sc=star(S.novas).c, s=R*(1+0.035*pulse);
+  const co=ctx.createRadialGradient(cx,cy,s*.8,cx,cy,s*2.6);
+  co.addColorStop(0,rgba(sc,.16)); co.addColorStop(1,rgba(sc,0)); ctx.fillStyle=co; ctx.beginPath(); ctx.arc(cx,cy,s*2.6,0,7); ctx.fill();
+  // limb darkening: real stars look dimmer at the edge
+  const g=ctx.createRadialGradient(cx-s*.15,cy-s*.15,s*.05,cx,cy,s);
+  g.addColorStop(0,mix(sc,'#e6dcc6',.3)); g.addColorStop(.7,sc); g.addColorStop(1,mix(sc,'#20140c',.45));
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,s,0,7); ctx.fill();
+  // slow-turning sunspots
+  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,s,0,7); ctx.clip(); ctx.fillStyle=rgba('#2a1c10',.18);
+  for(let i=0;i<3;i++){ const a=t*.06+i*2.1, x=cx+Math.cos(a)*s*.6, vis=Math.sin(a); if(vis<0) continue; ctx.beginPath(); ctx.ellipse(x,cy+(i-1)*s*.32,s*.09*vis+1,s*.07,0,0,7); ctx.fill(); }
+  ctx.restore();
+}
+function orbitArc(r,front,alpha){
+  ctx.strokeStyle=`rgba(150,160,190,${alpha})`; ctx.lineWidth=1; ctx.beginPath();
+  ctx.ellipse(cx,cy,r,r*TILT,0,front?0:Math.PI,front?Math.PI:2*Math.PI); ctx.stroke();
+}
+function kepler(M,e){ let E=M; for(let i=0;i<5;i++) E=E-(E-e*Math.sin(E)-M)/(1-e*Math.cos(E)); return E; }
+
+function frame(dt){
+  const sp=S.calm?0.45:1; tAnim+=dt*sp;
+  pulse=Math.max(0,pulse-dt*3);
+  paintSky();
+  ctx.clearRect(0,0,W,H);
+  const t=tAnim;
+  // twinkle
+  if(!S.calm) for(const s of twinkles){ const a=.05+.12*(0.5+0.5*Math.sin(t*s.s+s.p)); ctx.fillStyle=`rgba(205,208,222,${a})`; ctx.fillRect(s.x*W,s.y*H,1.4,1.4); }
+  // neighbour stars: a dim ring of companions that slowly brightens
+  const ns=Math.min(10,Math.ceil(Math.log2(own('star')+1)*2));
+  for(let i=0;i<ns;i++){ const q=STARRING[i], x=(q.d*W+t*2*(i%2?1:-1))%W, y=H*(0.08+0.84*q.h);
+    const g=ctx.createRadialGradient(x,y,0,x,y,5); g.addColorStop(0,'rgba(214,200,170,.4)'); g.addColorStop(1,'rgba(214,200,170,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc((x+W)%W,y,5,0,7); ctx.fill(); }
+  // dust motes
+  const nd=Math.min(DUST.length,own('dust')*3);
+  for(let i=0;i<nd;i++){ const d=DUST[i]; d.x=(d.x+d.vx*dt*sp+1)%1; d.y=(d.y+d.vy*dt*sp+1)%1; ctx.fillStyle=`rgba(190,178,158,${d.a})`; ctx.beginPath(); ctx.arc(d.x*W,d.y*H,d.r,0,7); ctx.fill(); }
+
+  // which planets exist
+  const nRock=Math.min(4,own('terra')), nGas=Math.min(4,own('giant'));
+  const live=[]; for(let i=0;i<nRock;i++) live.push(i); for(let i=0;i<nGas;i++) live.push(4+i);
+  const objs=[]; // {z, draw}
+  // orbits (back halves)
+  live.forEach(i=>orbitArc(slotR(i),false,.07));
+  // belt
+  const nb=Math.min(BELT.length,own('rock')*5), br=R*1.95+(maxR-R*1.95)*BELTF, bw=(maxR-R*1.95)*.05;
+  const beltFront=[];
+  for(let i=0;i<nb;i++){ const b=BELT[i], a=b.a+t*0.11/b.s, r=br+b.d*bw, [x,y]=proj(a,r);
+    if(Math.sin(a)>0){ beltFront.push([x,y,b.z]); continue; }
+    ctx.fillStyle=`rgba(150,142,128,${.25+.3*b.z})`; ctx.fillRect(x,y,1.3,1.3); }
+  // planets
+  const moonsN=Math.min(12,own('moon'));
+  hitPlanets=[];
+  live.forEach((i,li)=>{
+    const P=PLANETS[i], r=slotR(i), w=0.7*Math.pow(slotR(0)/r,1.5), a=PLPH[i]+t*w, [x,y]=proj(a,r);
+    const pr=Math.max(i<4?2.5:4,R*P.s*(0.85+0.3*(Math.sin(a)*.5+.5)));
+    objs.push({z:Math.sin(a),f:()=>{ drawPlanet(P,x,y,pr,t);
+      // moons around this planet
+      for(let m=li,k=0;m<moonsN;m+=live.length,k++){ if(k>2) break; const ma=t*(1.4-k*.3)+m*1.7, mr=pr+4+k*4;
+        const mx=x+Math.cos(ma)*mr, my=y+Math.sin(ma)*mr*.5; ctx.fillStyle='rgba(175,175,168,.75)'; ctx.beginPath(); ctx.arc(mx,my,Math.max(1,pr*.18),0,7); ctx.fill(); }
+    }});
+    hitPlanets.push({x,y,r:pr,P});
+  });
+  // comets
+  const nc=Math.min(COMETS.length,own('comet'));
+  for(let i=0;i<nc;i++){ const c=COMETS[i], A=maxR*c.a, M=c.M+t*0.35*c.sp/Math.pow(c.a,1.5), E=kepler(M%(6.283),c.e);
+    const px=A*(Math.cos(E)-c.e), py=A*Math.sqrt(1-c.e*c.e)*Math.sin(E);
+    const ox=px*Math.cos(c.w)-py*Math.sin(c.w), oy=px*Math.sin(c.w)+py*Math.cos(c.w);
+    const x=cx+ox, y=cy+oy*TILT, dist=Math.hypot(ox,oy)||1;
+    objs.push({z:oy/A,f:()=>{ const L=Math.min(maxR*.35,R*14/Math.max(.6,dist/R)), tx=x+ox/dist*L, ty=y+oy*TILT/dist*L;
+      const g=ctx.createLinearGradient(x,y,tx,ty); g.addColorStop(0,'rgba(140,180,186,.38)'); g.addColorStop(1,'rgba(140,180,186,0)');
+      ctx.strokeStyle=g; ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(tx,ty); ctx.stroke();
+      ctx.fillStyle='rgba(190,212,214,.7)'; ctx.beginPath(); ctx.arc(x,y,1.8,0,7); ctx.fill(); }});
+  }
+  objs.sort((a,b)=>a.z-b.z);
+  objs.filter(o=>o.z<0).forEach(o=>o.f());
+  drawSun(t);
+  live.forEach(i=>orbitArc(slotR(i),true,.1));
+  for(const [x,y,z] of beltFront){ ctx.fillStyle=`rgba(160,150,134,${.3+.35*z})`; ctx.fillRect(x,y,1.5,1.5); }
+  objs.filter(o=>o.z>=0).forEach(o=>o.f());
+
+  // supernova ring: slow and soft, never a flash
+  if(novaRing>0){ novaRing+=dt*.35; const k=novaRing; if(k>=1) novaRing=0; else { ctx.strokeStyle=rgba(star(S.novas).c,.25*(1-k)); ctx.lineWidth=6*(1-k)+1; ctx.beginPath(); ctx.arc(cx,cy,R+k*Math.max(W,H)*.7,0,7); ctx.stroke(); } }
+  // meteor
+  nextMeteor-=dt;
+  if(!meteor&&nextMeteor<=0){ const side=Math.random()<.5, y0=H*(.12+Math.random()*.3); meteor={x0:side?-20:W+20,y0,x1:side?W+20:-20,y1:y0+H*(.2+Math.random()*.35),t:0,dur:S.calm?11:8}; }
+  if(meteor){ meteor.t+=dt/meteor.dur; const m=meteor;
+    if(m.t>=1){ meteor=null; nextMeteor=55+Math.random()*60; }
+    else { const x=m.x0+(m.x1-m.x0)*m.t, y=m.y0+(m.y1-m.y0)*m.t, dx=m.x1-m.x0, dy=m.y1-m.y0, L=Math.hypot(dx,dy);
+      m.x=x; m.y=y; const tx=x-dx/L*60, ty=y-dy/L*60;
+      const g=ctx.createLinearGradient(x,y,tx,ty); g.addColorStop(0,'rgba(214,196,150,.55)'); g.addColorStop(1,'rgba(214,196,150,0)');
+      ctx.strokeStyle=g; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(tx,ty); ctx.stroke();
+      ctx.strokeStyle='rgba(214,196,150,.18)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(x,y,14+3*Math.sin(t*3),0,7); ctx.stroke();
+      ctx.fillStyle='rgba(222,208,172,.8)'; ctx.beginPath(); ctx.arc(x,y,2.6,0,7); ctx.fill(); } }
+  // ripples & floating numbers
+  for(let i=ripples.length-1;i>=0;i--){ const p=ripples[i]; p.k+=dt*1.6; if(p.k>=1){ripples.splice(i,1);continue;}
+    ctx.strokeStyle=`rgba(${p.c},${.22*(1-p.k)})`; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(p.x,p.y,p.r0+p.k*p.r1,0,7); ctx.stroke(); }
+  ctx.textAlign='center'; ctx.font='500 13px "JetBrains Mono", ui-monospace, monospace';
+  for(let i=floats.length-1;i>=0;i--){ const f=floats[i]; f.k+=dt*.8; if(f.k>=1){floats.splice(i,1);continue;}
+    ctx.fillStyle=`rgba(${f.c},${.85*(1-f.k)})`; ctx.fillText(f.txt,f.x,f.y-(S.calm?8:28)*f.k); }
+}
+
+// ---------- input ----------
+cv.addEventListener('pointerdown',e=>{
+  const rc=cv.getBoundingClientRect(), x=e.clientX-rc.left, y=e.clientY-rc.top;
+  if(meteor&&meteor.x!=null&&Math.hypot(meteor.x-x,meteor.y-y)<38){ catchMeteor(); return; }
+  let mult=0, label='';
+  const pl=hitPlanets.find(p=>Math.hypot(p.x-x,p.y-y)<p.r+12);
+  if(pl){ mult=3; label=pl.P.n+' '; }
+  else if(Math.hypot(x-cx,(y-cy))<R*1.7+18) mult=1;
+  if(!mult){ ripples.push({x,y,r0:4,r1:14,k:0,c:'130,138,160'}); return; }
+  const v=tapValue()*mult; earn(v); S.taps++; pulse=1;
+  tone(PENTA[Math.floor(Math.random()*PENTA.length)]*(pl?1.5:1),.28);
+  ripples.push({x:pl?pl.x:cx,y:pl?pl.y:cy,r0:pl?pl.r:R,r1:pl?18:R*.9,k:0,c:pl?'140,180,176':'196,163,108'});
+  floats.push({txt:label+'+'+fmt(v),x:x+(Math.random()*14-7),y:y-10,k:0,c:pl?'150,190,186':'214,196,160'}); if(floats.length>24) floats.shift();
+  if(S.taps===1||S.taps===1000) checkCatalog();
+  renderTop();
+});
+function catchMeteor(){
+  const r=rate(), m=meteor; S.catches++; meteor=null; nextMeteor=55+Math.random()*60;
+  if(Math.random()<.5||r<1){ const amt=Math.max(r*90,tapValue()*60); earn(amt); floats.push({txt:'Meteor +'+fmt(amt),x:m.x,y:m.y,k:0,c:'214,196,150'}); toast('Meteor caught',`+${fmt(amt)} stardust`); }
+  else { S.boostUntil=Date.now()+20000; floats.push({txt:'Gravity surge ×5',x:m.x,y:m.y,k:0,c:'214,196,150'}); toast('Gravity surge','All stardust ×5 for 20 seconds'); }
+  ripples.push({x:m.x,y:m.y,r0:4,r1:30,k:0,c:'214,196,150'}); tone(659,.3); tone(880,.35,.1); renderAll();
+}
+
+// ---------- loop ----------
+let lastT=performance.now(), uiAcc=0, saveAcc=0;
+function loop(now){
+  const dt=Math.min(0.1,(now-lastT)/1000); lastT=now;
+  const r=rate(); earn(r*dt); if(r>S.best) S.best=r;
+  frame(dt);
+  uiAcc+=dt; if(uiAcc>0.25){ uiAcc=0; checkCatalog(); renderAll(); }
+  saveAcc+=dt; if(saveAcc>5){ saveAcc=0; save(); }
+  requestAnimationFrame(loop);
+}
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) save(); else lastT=performance.now(); });
+window.addEventListener('pagehide',save);
+
+function start(data){
+  load(data&&data.S);
+  const away=(Date.now()-S.last)/1000;
+  buildProducers(); syncBuy(); applySettings(); resize();
+  if(away>60&&rate()>0){ const secs=Math.min(away,OFFLINE_CAP), amt=rate()/boostMult()*secs*0.5; earn(amt);
+    showModal(`<h3>While you were away</h3><p>Your system kept gathering for ${fmtTime(secs)} at half speed.</p><div class="gain">+${fmt(amt)} stardust</div><button class="big-btn" id="mOk">Collect</button>`); }
+  setTab('build'); requestAnimationFrame(t=>{lastT=t;loop(t);});
+}
+if(hot&&hot.ready) hot.ready(start); else start(hot&&hot.data?hot.data:{});
+})();
+</script>
