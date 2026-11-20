@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Nebula Engine",
+    "slug": "nebula-engine",
+    "owner": "hambones-team",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.hambonesteam.nebulaengine",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#05040A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "278341ec-8666-427b-b068-81204adfe305"
+      }
+    }
+  }
+}
